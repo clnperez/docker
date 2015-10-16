@@ -381,3 +381,32 @@ func (s *DockerSuite) TestInspectSizeFlagImage(c *check.C) {
 
 	c.Assert(strings.TrimSpace(out), check.Equals, "<no value>,<no value>", check.Commentf("Fields SizeRw and SizeRootFs are not exepcted to exist"))
 }
+
+func (s *DockerSuite) TestInspectOomDisabled(c *check.C) {
+	testRequires(c, oomControl)
+	var (
+		formatStr = fmt.Sprintf("--format='{{.HostConfig.OomKillDisable}}'")
+		name      = "oomDisableInspect"
+	)
+	// Using 10MB due to an issue with GCCGO in which 4GB prevents container from starting.
+	dockerCmd(c, "run", "--name", name, "--oom-kill-disable=true", "busybox", "/bin/sh")
+	out, _ := dockerCmd(c, "inspect", formatStr, name)
+	c.Assert(strings.TrimSpace(out), check.Equals, "true", check.Commentf("OOMKillDisable setting not correct."))
+}
+
+func (s *DockerSuite) TestInspectOomKilled(c *check.C) {
+	testRequires(c, oomControl)
+	var (
+		formatStr = fmt.Sprintf("--format='{{.State.OOMKilled}}'")
+		name      = "oomKillInspect"
+	)
+	// Using 10MB due to an issue with GCCGO in which 4GB prevents container from starting.
+	//_, exitCode, err := dockerCmdWithTimeout(30*time.Second, "run", "--name", name, "-m", "10MB", "busybox", "dd", "if=/dev/zero", "of=test_out", "bs=24M", "count=1")
+	_, exitCode, err := dockerCmdWithTimeout(30*time.Second, "run", "--name", name, "-m", "10MB", "busybox", "sh", "-c", "x=a; while true; do x=$x$x$x$x; done")
+	if err != nil && exitCode != 137 {
+		fmt.Println("Error waiting for comtainer to be killed due to OOM restrictions: %s", err)
+	}
+	out, _ := dockerCmd(c, "inspect", formatStr, name)
+	out = strings.TrimSpace(out)
+	c.Assert(out, check.Equals, "true", check.Commentf("Container not killed correctly or Inspect field incorrect."))
+}
