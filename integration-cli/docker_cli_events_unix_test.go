@@ -55,14 +55,12 @@ func (s *DockerSuite) TestEventsRedirectStdout(c *check.C) {
 }
 
 func (s *DockerSuite) TestEventsOOMDisableFalse(c *check.C) {
-	testRequires(c, DaemonIsLinux)
-	testRequires(c, NativeExecDriver)
-	testRequires(c, oomControl)
+	testRequires(c, DaemonIsLinux, NativeExecDriver, oomControl)
 
 	errChan := make(chan error)
 	go func() {
 		defer close(errChan)
-		out, exitCode, _ := dockerCmdWithError("run", "--name", "oomFalse", "-m", "10MB", "busybox", "sh", "-c", "x=a; while true; do x=$x$x$x$x; done")
+		out, exitCode, _ := dockerCmdWithError("run", "--name", "oomFalse", "-m", "10MB", "busybox", "dd", "if=/dev/zero", "of=output.dat", "bs=24M", "count=1")
 		if expected := 137; exitCode != expected {
 			errChan <- fmt.Errorf("wrong exit code for OOM container: expected %d, got %d (output: %q)", expected, exitCode, out)
 		}
