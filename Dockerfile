@@ -127,28 +127,32 @@ RUN set -x \
 # IMPORTANT: If the version of Go is updated, the Windows to Linux CI machines
 #            will need updating, to avoid errors. Ping #docker-maintainers on IRC
 #            with a heads-up.
-ENV GO_VERSION 1.5.4
+ENV GO_VERSION 1.4
+RUN mkdir $HOME/go1.4
 RUN curl -fsSL "https://storage.googleapis.com/golang/go${GO_VERSION}.linux-amd64.tar.gz" \
-	| tar -xzC /usr/local
+	| tar -xzC $HOME/go1.4
+RUN cd /usr/local/ && git clone https://go.googlesource.com/go
+ENV GOROOT_BOOTSTRAP /root/go1.4/go/
+RUN cd /usr/local/go/src && ./make.bash
 
 # !!! TEMPORARY HACK !!!
 # Because of https://github.com/golang/go/issues/15286 we have to revert to Go 1.5.3 for windows/amd64 in master
 # To change which version of Go to compile with, simply prepend PATH with /usr/local/go1.5.3/bin
 # and set GOROOT to /usr/local/go1.5.3
-ENV HACK_GO_VERSION 1.5.3
-RUN curl -fsSL "https://storage.googleapis.com/golang/go${HACK_GO_VERSION}.linux-amd64.tar.gz" \
-	| tar -xzC /tmp \
-	&& mv /tmp/go "/usr/local/go${HACK_GO_VERSION}"
+#ENV HACK_GO_VERSION 1.5.3
+#RUN curl -fsSL "https://storage.googleapis.com/golang/go${HACK_GO_VERSION}.linux-amd64.tar.gz" \
+#	| tar -xzC /tmp \
+#	&& mv /tmp/go "/usr/local/go${HACK_GO_VERSION}"
 
 ENV PATH /go/bin:/usr/local/go/bin:$PATH
 ENV GOPATH /go:/go/src/github.com/docker/docker/vendor
 
 # Compile Go for cross compilation
-ENV DOCKER_CROSSPLATFORMS \
-	linux/386 linux/arm \
-	darwin/amd64 \
-	freebsd/amd64 freebsd/386 freebsd/arm \
-	windows/amd64 windows/386
+#ENV DOCKER_CROSSPLATFORMS \
+#	linux/386 linux/arm \
+#	darwin/amd64 \
+#	freebsd/amd64 freebsd/386 freebsd/arm \
+#	windows/amd64 windows/386
 
 # This has been commented out and kept as reference because we don't support compiling with older Go anymore.
 # ENV GOFMT_VERSION 1.3.3
