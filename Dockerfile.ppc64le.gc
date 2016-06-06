@@ -8,8 +8,8 @@
 # # Mount your source in an interactive container for quick testing:
 # docker run -v `pwd`:/go/src/github.com/docker/docker --privileged -i -t docker-ppc64le_gc bash
 #
-# # Run the test suite:
-# docker run --privileged docker-ppc64le_gc ./hack/make.sh test
+# # Run the integration test suite:
+# docker run --privileged docker-ppc64le_gc ./hack/make.sh binary test-integration-cli
 #
 # Note: AppArmor used to mess with privileged mode, but this is no longer
 # the case. Therefore, you don't have to disable it anymore.
