@@ -457,11 +457,12 @@ type NetworkResource struct {
 
 // EndpointResource contains network resources allocated and used for a container in a network
 type EndpointResource struct {
-	Name        string
-	EndpointID  string
-	MacAddress  string
-	IPv4Address string
-	IPv6Address string
+	Name         string
+	EndpointID   string
+	MacAddress   string
+	IPv4Address  string
+	IPv6Address  string
+	ExposedPorts map[string][]uint16
 }
 
 // NetworkCreate is the expected body of the "create network" http request message

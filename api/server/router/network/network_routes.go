@@ -192,6 +192,7 @@ func (n *networkRouter) buildNetworkResource(nw libnetwork.Network) *types.Netwo
 			key = sb.ContainerID()
 		}
 
+		// Instead of exposed ports/endpoint, just put them all in the nw resource?
 		r.Containers[key] = buildEndpointResource(e)
 	}
 	return r
@@ -264,6 +265,8 @@ func buildEndpointResource(e libnetwork.Endpoint) types.EndpointResource {
 	if ei == nil {
 		return er
 	}
+
+	er.ExposedPorts = ei.ExposedPorts()
 
 	if iface := ei.Iface(); iface != nil {
 		if mac := iface.MacAddress(); mac != nil {

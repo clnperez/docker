@@ -11,6 +11,7 @@ import (
 
 // EndpointInfo provides an interface to retrieve network resources bound to the endpoint.
 type EndpointInfo interface {
+
 	// Iface returns InterfaceInfo, go interface that can be used
 	// to get more information on the interface which was assigned to
 	// the endpoint by the driver. This can be used after the
@@ -24,6 +25,9 @@ type EndpointInfo interface {
 	// GatewayIPv6 returns the IPv6 gateway assigned by the driver.
 	// This will only return a valid value if a container has joined the endpoint.
 	GatewayIPv6() net.IP
+
+	// ExposedPorts returns a list of ports exposed on this endpoint
+	ExposedPorts() map[string][]uint16
 
 	// StaticRoutes returns the list of static routes configured by the network
 	// driver when the container joins a network
@@ -228,6 +232,19 @@ func (ep *endpoint) DriverInfo() (map[string]interface{}, error) {
 	}
 
 	return driver.EndpointOperInfo(n.ID(), ep.ID())
+}
+
+func (ep *endpoint) ExposedPorts() map[string][]uint16 {
+	eps := make(map[string][]uint16)
+	for _, tpp := range ep.exposedPorts {
+		switch tpp.Proto.String() {
+		case "tcp":
+			eps["tcp"] = append(eps["tcp"], tpp.Port)
+		case "udp":
+			eps["udp"] = append(eps["udp"], tpp.Port)
+		}
+	}
+	return eps
 }
 
 func (ep *endpoint) Iface() InterfaceInfo {

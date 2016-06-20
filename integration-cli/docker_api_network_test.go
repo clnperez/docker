@@ -82,7 +82,7 @@ func (s *DockerSuite) TestApiNetworkInspect(c *check.C) {
 	c.Assert(nr.Name, checker.Equals, "bridge")
 
 	// run a container and attach it to the default bridge network
-	out, _ := dockerCmd(c, "run", "-d", "--name", "test", "busybox", "top")
+	out, _ := dockerCmd(c, "run", "-d", "-p", "9876-9877", "-p", "9876/udp", "--name", "test", "busybox", "top")
 	containerID := strings.TrimSpace(out)
 	containerIP := findContainerIP(c, "test", "bridge")
 
@@ -99,6 +99,11 @@ func (s *DockerSuite) TestApiNetworkInspect(c *check.C) {
 	ip, _, err := net.ParseCIDR(nr.Containers[containerID].IPv4Address)
 	c.Assert(err, checker.IsNil)
 	c.Assert(ip.String(), checker.Equals, containerIP)
+
+	tcpPorts := []uint16{9877, 9876}
+	udpPorts := []uint16{9876}
+	c.Assert(nr.Containers[containerID].ExposedPorts["tcp"], checker.DeepEquals, tcpPorts)
+	c.Assert(nr.Containers[containerID].ExposedPorts["udp"], checker.DeepEquals, udpPorts)
 
 	// IPAM configuration inspect
 	ipam := network.IPAM{
