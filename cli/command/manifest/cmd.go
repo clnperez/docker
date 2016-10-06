@@ -1,7 +1,6 @@
 package manifest
 
 import (
-	//"errors"
 	"fmt"
 
 	"github.com/docker/docker/cli"
@@ -14,30 +13,25 @@ func NewManifestCommand(dockerCli *command.DockerCli) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "manifest COMMAND",
 		Short: "Manage Docker image manifests and lists",
-		Long:  manifestListDescription,
+		Long:  manifestDescription,
 		Args:  cli.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(dockerCli.Err(), "\n"+cmd.UsageString())
 		},
 	}
-	// Structure as:
-	// manifest fetch <ref>
-	// which will fetch either a list, or an image manifest if there is no list?
-	// what does the api get?
 	cmd.AddCommand(
-		//newCreateCommand(dockerCli),
 		newListFetchCommand(dockerCli),
-		//newInspectCommand(dockerCli),
-		//newListCommand(dockerCli),
+		//newCreateCommand(dockerCli),
 		//newRemoveCommand(dockerCli),
+		//newEditCommand(dockerCli),
 	)
 	return cmd
 }
 
-var manifestListDescription = `
+var manifestDescription = `
 The **docker manifest** command has subcommands for managing image manifests and 
 manifest lists. A manifest list allows you to use one name to refer to the same image 
-build for multiple architectures.
+built for multiple architectures.
 
 To see help for a subcommand, use:
 

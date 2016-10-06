@@ -35,7 +35,7 @@ type v1ManifestFetcher struct {
 	session *registry.Session
 }
 
-func (mf *v1ManifestFetcher) Fetch(ctx context.Context, ref reference.Named) ([]ImageInspect, error) {
+func (mf *v1ManifestFetcher) Fetch(ctx context.Context, ref reference.Named) ([]ImgManifestInspect, error) {
 	if _, isCanonical := ref.(reference.Canonical); isCanonical {
 		// Allowing fallback, because HTTPS v1 is before HTTP v2
 		return nil, fallbackError{
@@ -76,9 +76,9 @@ func (mf *v1ManifestFetcher) Fetch(ctx context.Context, ref reference.Named) ([]
 	return imgsInspect, nil
 }
 
-func (mf *v1ManifestFetcher) fetchWithSession(ctx context.Context, ref reference.Named) ([]ImageInspect, error) {
+func (mf *v1ManifestFetcher) fetchWithSession(ctx context.Context, ref reference.Named) ([]ImgManifestInspect, error) {
 	var (
-		imageList = []ImageInspect{}
+		imageList = []ImgManifestInspect{}
 		pulledImg *image.Image
 	)
 	repoData, err := mf.session.GetRepositoryData(mf.repoInfo)
@@ -153,7 +153,7 @@ func (mf *v1ManifestFetcher) fetchWithSession(ctx context.Context, ref reference
 		return nil, fmt.Errorf("No such image %s:%s", mf.repoInfo.FullName(), tag)
 	}
 
-	imageInsp := makeImageInspect(pulledImg, tag, manifestInfo{}, schema1.MediaTypeManifest, tagList)
+	imageInsp := makeImgManifestInspect(pulledImg, tag, manifestInfo{}, schema1.MediaTypeManifest, tagList)
 	imageList = append(imageList, *imageInsp)
 	return imageList, nil
 }

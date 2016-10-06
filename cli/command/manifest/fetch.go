@@ -2,7 +2,6 @@ package manifest
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"syscall"
@@ -29,38 +28,16 @@ type fetchOptions struct {
 	raw    bool
 }
 
-// fallbackError wraps an error that can possibly allow fallback to a different
-// endpoint.
-type fallbackError struct {
-	// err is the error being wrapped.
-	err error
-	// confirmedV2 is set to true if it was confirmed that the registry
-	// supports the v2 protocol. This is used to limit fallbacks to the v1
-	// protocol.
-	confirmedV2 bool
-	transportOK bool
-}
-
-// Error renders the FallbackError as a string.
-func (f fallbackError) Error() string {
-	return f.err.Error()
-}
-
 type manifestFetcher interface {
-	Fetch(ctx context.Context, ref reference.Named) ([]ImageInspect, error)
+	Fetch(ctx context.Context, ref reference.Named) ([]ImgManifestInspect, error)
 }
 
 // NewListFetchCommand creates a new `docker manifest fetch` command
 func newListFetchCommand(dockerCli *command.DockerCli) *cobra.Command {
-	// note: this is added to the larger manifest command via
-	// 	cmd.AddCommand() in cli/manifest/cmd.go
 	var opts fetchOptions
 
 	cmd := &cobra.Command{
-		Use: "fetch [OPTIONS] NAME[:TAG]",
-		// Should this fetch a list if the ref points to a list?
-		// how does that work? if you want an image, not a list, does
-		// the api use the same func?
+		Use:   "fetch [OPTIONS] NAME[:TAG]",
 		Short: "Fetch an image's manifest list from a registry",
 		Args:  cli.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -92,7 +69,6 @@ func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 		fmt.Println(string(out))
 		return nil
 	}
-	//fmt.Println(imgInspect)
 	// output basic informative details about the image
 	if len(imgInspect) == 1 {
 		// this is a basic single manifest
@@ -106,7 +82,7 @@ func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 		}
 		return nil
 	}
-	// more than one response--this is a manifest list
+	// More than one response. This is a manifest list.
 	fmt.Printf("%s is a manifest list containing the following %d manifest references:\n", name, len(imgInspect))
 	for i, img := range imgInspect {
 		fmt.Printf("%d    Mfst Type: %s\n", i+1, img.MediaType)
@@ -128,19 +104,11 @@ func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 	return nil
 }
 
-func getImageData(dockerCli *command.DockerCli, name string) ([]ImageInspect, *registry.RepositoryInfo, error) {
+func getImageData(dockerCli *command.DockerCli, name string) ([]ImgManifestInspect, *registry.RepositoryInfo, error) {
 
-	// func ParseIDOrReference(idOrRef string) (digest.Digest, Named, error)
-	// calls Validate and ParseNamed
 	if _, _, err := reference.ParseIDOrReference(name); err != nil {
-		return nil, nil, errors.New(fmt.Sprintf("Error parsing reference: %s\n", err))
+		return nil, nil, fmt.Errorf("Error parsing reference: %s\n", err)
 	}
-	// You can use a digest with a manifest list? Assume if digest then they want an image,
-	// not a list, and we'll run with it. The later logic checks for the tag first, then
-	// checks for a digest if !tagged.
-	//if len(dgst) != 0 {
-	//	return nil, nil, errors.New("Cannot use digest with manifest list.")
-	//}
 
 	namedRef, err := reference.ParseNamed(name)
 	// Resolve the Repository name from fqn to RepositoryInfo
@@ -152,14 +120,13 @@ func getImageData(dockerCli *command.DockerCli, name string) ([]ImageInspect, *r
 	ctx := context.Background()
 
 	authConfig := command.ResolveAuthConfig(ctx, dockerCli, repoInfo.Index)
-	//requestPrivilege := command.RegistryAuthenticationPrivilegedFunc(dockerCli, repoInfo.Index, "pull")
 
 	options := registry.ServiceOptions{}
 	options.InsecureRegistries = append(options.InsecureRegistries, "0.0.0.0/0")
 	registryService := registry.NewService(options)
 
 	// a list of registry.APIEndpoint, which could be mirrors, etc., of locally-configured
-	// repo endpoints. The list will be ordered by priority. See docker/docker/registry/service.go
+	// repo endpoints. The list will be ordered by priority (v2, https, v1).
 	endpoints, err := registryService.LookupPullEndpoints(repoInfo.Hostname())
 	if err != nil {
 		return nil, nil, err
@@ -169,11 +136,12 @@ func getImageData(dockerCli *command.DockerCli, name string) ([]ImageInspect, *r
 	var (
 		lastErr                error
 		discardNoSupportErrors bool
-		foundImages            []ImageInspect
+		foundImages            []ImgManifestInspect
 		confirmedV2            bool
 		confirmedTLSRegistries = make(map[string]struct{})
 	)
 
+	// Try to find the first endpoint that is *both* v2 and using TLS.
 	for _, endpoint := range endpoints {
 		// make sure I can reach the registry, same as docker pull does
 		v1endpoint, err := endpoint.ToV1Endpoint(dockerversion.DockerUserAgent(nil), nil)
@@ -270,7 +238,7 @@ func newManifestFetcher(endpoint registry.APIEndpoint, repoInfo *registry.Reposi
 	return nil, fmt.Errorf("unknown version %d for registry %s", endpoint.Version, endpoint.URL)
 }
 
-func makeImageInspect(img *image.Image, tag string, mfInfo manifestInfo, mediaType string, tagList []string) *ImageInspect {
+func makeImgManifestInspect(img *image.Image, tag string, mfInfo manifestInfo, mediaType string, tagList []string) *ImgManifestInspect {
 	var digest string
 	if err := mfInfo.digest.Validate(); err == nil {
 		digest = mfInfo.digest.String()
@@ -279,7 +247,7 @@ func makeImageInspect(img *image.Image, tag string, mfInfo manifestInfo, mediaTy
 	for _, blobDigest := range mfInfo.blobDigests {
 		digests = append(digests, blobDigest.String())
 	}
-	return &ImageInspect{
+	return &ImgManifestInspect{
 		Size:            mfInfo.length,
 		MediaType:       mediaType,
 		Tag:             tag,
@@ -295,7 +263,7 @@ func makeImageInspect(img *image.Image, tag string, mfInfo manifestInfo, mediaTy
 		Os:              img.OS,
 		Layers:          digests,
 		Platform:        mfInfo.platform,
-		CanonicalJson:   mfInfo.jsonBytes,
+		CanonicalJSON:   mfInfo.jsonBytes,
 	}
 }
 

@@ -40,7 +40,7 @@ type manifestInfo struct {
 	jsonBytes   []byte
 }
 
-func (mf *v2ManifestFetcher) Fetch(ctx context.Context, ref reference.Named) ([]ImageInspect, error) {
+func (mf *v2ManifestFetcher) Fetch(ctx context.Context, ref reference.Named) ([]ImgManifestInspect, error) {
 	var err error
 
 	mf.repo, mf.confirmedV2, err = dockerdistribution.NewV2Repository(ctx, mf.repoInfo, mf.endpoint, nil, &mf.authConfig, "pull")
@@ -65,12 +65,12 @@ func (mf *v2ManifestFetcher) Fetch(ctx context.Context, ref reference.Named) ([]
 	return images, err
 }
 
-func (mf *v2ManifestFetcher) fetchWithRepository(ctx context.Context, ref reference.Named) ([]ImageInspect, error) {
+func (mf *v2ManifestFetcher) fetchWithRepository(ctx context.Context, ref reference.Named) ([]ImgManifestInspect, error) {
 	var (
 		manifest    distribution.Manifest
 		tagOrDigest string // Used for logging/progress only
 		tagList     = []string{}
-		imageList   = []ImageInspect{}
+		imageList   = []ImgManifestInspect{}
 	)
 
 	manSvc, err := mf.repo.Manifests(ctx)
@@ -152,7 +152,7 @@ func (mf *v2ManifestFetcher) fetchWithRepository(ctx context.Context, ref refere
 	}
 
 	for idx, img := range images {
-		imgReturn := makeImageInspect(img, tagOrDigest, mfInfos[idx], mediaType[idx], tagList)
+		imgReturn := makeImgManifestInspect(img, tagOrDigest, mfInfos[idx], mediaType[idx], tagList)
 		imageList = append(imageList, *imgReturn)
 	}
 	return imageList, nil
