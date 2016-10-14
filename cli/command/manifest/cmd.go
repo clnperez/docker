@@ -21,7 +21,7 @@ func NewManifestCommand(dockerCli *command.DockerCli) *cobra.Command {
 	}
 	cmd.AddCommand(
 		newListFetchCommand(dockerCli),
-		//newCreateCommand(dockerCli),
+		newCreateListCommand(dockerCli),
 		//newRemoveCommand(dockerCli),
 		//newEditCommand(dockerCli),
 	)
