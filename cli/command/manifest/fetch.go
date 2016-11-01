@@ -3,6 +3,8 @@ package manifest
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/user"
 	"strings"
 	"syscall"
 	"time"
@@ -69,19 +71,48 @@ func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 		fmt.Println(string(out))
 		return nil
 	}
-	// output basic informative details about the image
+	/*
+		// output basic informative details about the image
+		if len(imgInspect) == 1 {
+			// this is a basic single manifest
+			fmt.Printf("%s: manifest type: %s\n", name, imgInspect[0].MediaType)
+			fmt.Printf("      Digest: %s\n", imgInspect[0].Digest)
+			fmt.Printf("Architecture: %s\n", imgInspect[0].Architecture)
+			fmt.Printf("          OS: %s\n", imgInspect[0].Os)
+			fmt.Printf("    # Layers: %d\n", len(imgInspect[0].Layers))
+			for i, digest := range imgInspect[0].Layers {
+				fmt.Printf("      layer %d: digest = %s\n", i+1, digest)
+			}
+			return nil
+		}*/
+	// Store this image so that it can be annotated.
 	if len(imgInspect) == 1 {
-		// this is a basic single manifest
-		fmt.Printf("%s: manifest type: %s\n", name, imgInspect[0].MediaType)
-		fmt.Printf("      Digest: %s\n", imgInspect[0].Digest)
-		fmt.Printf("Architecture: %s\n", imgInspect[0].Architecture)
-		fmt.Printf("          OS: %s\n", imgInspect[0].Os)
-		fmt.Printf("    # Layers: %d\n", len(imgInspect[0].Layers))
-		for i, digest := range imgInspect[0].Layers {
-			fmt.Printf("      layer %d: digest = %s\n", i+1, digest)
+		var (
+			curUser *user.User
+			err     error
+			fd      *os.File
+		)
+		if curUser, err = user.Current(); err != nil {
+			fmt.Errorf("Error retriving user: %s", err)
+			return err
 		}
-		return nil
+		fmt.Printf("User: %s\n", curUser.Username)
+		imageHash := hashString(fmt.Sprintf("%s%s", name, curUser.Username))
+		// @TODO: Undo this hardcoded dir:
+		newDir := fmt.Sprintf("/var/lib/docker/tmp/M-%s", imageHash)
+		os.Mkdir(newDir, 0755)
+		// Use the digest as the filename, but sub dashes for slashes and/or colons
+		newFile := strings.Replace(strings.Replace(name, "/", "-", -1), ":", "-", -1)
+		if fd, err = os.Create(fmt.Sprintf("%s/%s", newDir, newFile)); err != nil {
+			fmt.Printf("Error creating file: %s", err)
+			return err
+		}
+		if _, err = fd.Write(imgInspect[0].CanonicalJSON); err != nil {
+			fmt.Printf("Error writing to file: %s", err)
+			return err
+		}
 	}
+
 	// More than one response. This is a manifest list.
 	fmt.Printf("%s is a manifest list containing the following %d manifest references:\n", name, len(imgInspect))
 	for i, img := range imgInspect {

@@ -4,6 +4,11 @@ package manifest
 // of https://golang.org/doc/install/source
 // Added linux/s390x as we know System z support already exists
 
+import (
+	"hash/fnv"
+	"strconv"
+)
+
 type osArch struct {
 	os   string
 	arch string
@@ -45,4 +50,10 @@ func isValidOSArch(os string, arch string) bool {
 	// check for existence of this combo
 	_, ok := validOSArches[osArch{os, arch}]
 	return ok
+}
+
+func hashString(s string) string {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	return strconv.Itoa(int(h.Sum32()))
 }
