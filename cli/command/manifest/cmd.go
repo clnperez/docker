@@ -22,8 +22,9 @@ func NewManifestCommand(dockerCli *command.DockerCli) *cobra.Command {
 	cmd.AddCommand(
 		newListFetchCommand(dockerCli),
 		newCreateListCommand(dockerCli),
+		newInspectCommand(dockerCli),
 		//newRemoveCommand(dockerCli),
-		//newEditCommand(dockerCli),
+		newAnnotateCommand(dockerCli),
 	)
 	return cmd
 }
