@@ -23,11 +23,18 @@ import (
 	"github.com/docker/docker/reference"
 	"github.com/docker/docker/registry"
 	"github.com/spf13/cobra"
+	//	"github.com/spf13/pflag"
 )
 
 type fetchOptions struct {
 	remote string
 	raw    bool
+}
+
+type annotateOptions struct {
+	remote   string
+	variants []string
+	features []string
 }
 
 type manifestFetcher interface {
@@ -44,6 +51,7 @@ func newListFetchCommand(dockerCli *command.DockerCli) *cobra.Command {
 		Args:  cli.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.remote = args[0]
+
 			return runListFetch(dockerCli, opts)
 		},
 	}
@@ -51,6 +59,54 @@ func newListFetchCommand(dockerCli *command.DockerCli) *cobra.Command {
 	flags := cmd.Flags()
 
 	flags.BoolVarP(&opts.raw, "raw", "r", false, "Provide raw JSON output")
+	command.AddTrustedFlags(flags, true)
+
+	return cmd
+}
+
+// NewInspectCommand creates a new `docker manifest inspect` command
+func newInspectCommand(dockerCli *command.DockerCli) *cobra.Command {
+	var opts fetchOptions
+
+	cmd := &cobra.Command{
+		Use:   "inspect [OPTIONS] NAME[:TAG]",
+		Short: "Display an image's manifest.",
+		Args:  cli.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts.remote = args[0]
+			return runListInspect(dockerCli, opts)
+		},
+	}
+
+	flags := cmd.Flags()
+
+	flags.BoolVarP(&opts.raw, "raw", "r", false, "Provide raw JSON output")
+	command.AddTrustedFlags(flags, true)
+
+	return cmd
+}
+
+// NewAnnotateCommand creates a new `docker manifest inspect` command
+func newAnnotateCommand(dockerCli *command.DockerCli) *cobra.Command {
+	var opts annotateOptions
+
+	cmd := &cobra.Command{
+		Use:   "annotate NAME[:TAG] [OPTIONS]",
+		Short: "Add additional information to an image's manifest.",
+		Args:  cli.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts.remote = args[0]
+			return runManifestAnnotate(dockerCli, opts)
+		},
+	}
+
+	flags := cmd.Flags()
+
+	// @TODO: Should we do any validation? We can't have an exhaustive list
+	// of features, but at least check for only a csv of alpha-chars?
+	flags.StringSliceVarP(&opts.features, "features", "f", []string{}, "Add feature metadata to a manifest before pushing it.")
+	flags.StringSliceVarP(&opts.variants, "variants", "v", []string{}, "Add arch variants to a manifest before pushing it.")
+
 	command.AddTrustedFlags(flags, true)
 
 	return cmd
@@ -71,48 +127,98 @@ func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 		fmt.Println(string(out))
 		return nil
 	}
-	/*
-		// output basic informative details about the image
-		if len(imgInspect) == 1 {
-			// this is a basic single manifest
-			fmt.Printf("%s: manifest type: %s\n", name, imgInspect[0].MediaType)
-			fmt.Printf("      Digest: %s\n", imgInspect[0].Digest)
-			fmt.Printf("Architecture: %s\n", imgInspect[0].Architecture)
-			fmt.Printf("          OS: %s\n", imgInspect[0].Os)
-			fmt.Printf("    # Layers: %d\n", len(imgInspect[0].Layers))
-			for i, digest := range imgInspect[0].Layers {
-				fmt.Printf("      layer %d: digest = %s\n", i+1, digest)
-			}
-			return nil
-		}*/
+
+	if err := storeManifest(imgInspect, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func storeManifest(imgInspect []ImgManifestInspect, overwrite bool) error {
 	// Store this image so that it can be annotated.
-	if len(imgInspect) == 1 {
-		var (
-			curUser *user.User
-			err     error
-			fd      *os.File
-		)
-		if curUser, err = user.Current(); err != nil {
-			fmt.Errorf("Error retriving user: %s", err)
+
+	var (
+		curUser *user.User
+		err     error
+		newDir  string
+		fd      *os.File
+	)
+
+	if curUser, err = user.Current(); err != nil {
+		fmt.Errorf("Error retreiving user: %s", err)
+		return err
+	}
+
+	// @TODO: Will this always exist?
+	newDir = fmt.Sprintf("%s/.docker/manifests/", curUser.HomeDir)
+	os.Mkdir(newDir, 0755)
+	for _, mf := range imgInspect {
+		// Use the digest as the filename. First strip the prefix.
+		newFile := fmt.Sprintf("%s%s", newDir, strings.Split(mf.Digest, ":")[1])
+		fileInfo, err := os.Stat(newFile)
+		if err != nil && !os.IsNotExist(err) {
+			logrus.Debugf("Something went wrong trying to stat the manifest file: %s", err)
 			return err
 		}
-		fmt.Printf("User: %s\n", curUser.Username)
-		imageHash := hashString(fmt.Sprintf("%s%s", name, curUser.Username))
-		// @TODO: Undo this hardcoded dir:
-		newDir := fmt.Sprintf("/var/lib/docker/tmp/M-%s", imageHash)
-		os.Mkdir(newDir, 0755)
-		// Use the digest as the filename, but sub dashes for slashes and/or colons
-		newFile := strings.Replace(strings.Replace(name, "/", "-", -1), ":", "-", -1)
-		if fd, err = os.Create(fmt.Sprintf("%s/%s", newDir, newFile)); err != nil {
-			fmt.Printf("Error creating file: %s", err)
-			return err
+		if fileInfo != nil && overwrite == false {
+			logrus.Debug("Not overwriting existing manifest file")
+			continue
+		} else {
+			if fd, err = os.Create(newFile); err != nil {
+				logrus.Debugf("Error creating file: %s", err)
+				return err
+			}
 		}
-		if _, err = fd.Write(imgInspect[0].CanonicalJSON); err != nil {
+
+		defer fd.Close()
+		if _, err = fd.Write(mf.CanonicalJSON); err != nil {
 			fmt.Printf("Error writing to file: %s", err)
 			return err
 		}
 	}
 
+	return nil
+}
+
+func runListInspect(dockerCli *command.DockerCli, opts fetchOptions) error {
+
+	// Get the data and then format it
+	var (
+		imgInspect []ImgManifestInspect
+	)
+
+	name := opts.remote
+	imgInspect, _, err := getImageData(dockerCli, name)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	if opts.raw == true {
+		out, err := json.Marshal(imgInspect)
+		if err != nil {
+			logrus.Fatal(err)
+		}
+		fmt.Println(string(out))
+		return nil
+	}
+
+	// Don't overwrite local copies on inspect.
+	if err := storeManifest(imgInspect, false); err != nil {
+		return err
+	}
+
+	// output basic informative details about the image
+	if len(imgInspect) == 1 {
+		// this is a basic single manifest
+		fmt.Printf("%s: manifest type: %s\n", name, imgInspect[0].MediaType)
+		fmt.Printf("      Digest: %s\n", imgInspect[0].Digest)
+		fmt.Printf("Architecture: %s\n", imgInspect[0].Architecture)
+		fmt.Printf("          OS: %s\n", imgInspect[0].Os)
+		fmt.Printf("    # Layers: %d\n", len(imgInspect[0].Layers))
+		for i, digest := range imgInspect[0].Layers {
+			fmt.Printf("      layer %d: digest = %s\n", i+1, digest)
+		}
+		return nil
+	}
 	// More than one response. This is a manifest list.
 	fmt.Printf("%s is a manifest list containing the following %d manifest references:\n", name, len(imgInspect))
 	for i, img := range imgInspect {
@@ -132,6 +238,17 @@ func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 		}
 		fmt.Println()
 	}
+	return nil
+}
+
+func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) error {
+	for _, flag := range opts.features {
+		fmt.Printf("Feature flags:%s \n", flag)
+	}
+	for _, flag := range opts.variants {
+		fmt.Printf("Variant flags:%s \n", flag)
+	}
+
 	return nil
 }
 
