@@ -139,14 +139,15 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts) error {
 	// Now create the manifest list payload by looking up the manifest schemas
 	// for the constituent images:
 	logrus.Info("Retrieving digests of images...")
-	for _, img := range yamlInput.Manifests {
+	for _, yamlImg := range yamlInput.Manifests {
 		// validate os/arch input
-		if !isValidOSArch(img.Platform.OS, img.Platform.Architecture) {
-			return fmt.Errorf("Manifest entry for image %s has unsupported os/arch combination: %s/%s", img.Image, img.Platform.OS, img.Platform.Architecture)
+		if !isValidOSArch(yamlImg.Platform.OS, yamlImg.Platform.Architecture) {
+			return fmt.Errorf("Manifest entry for image %s has unsupported os/arch combination: %s/%s", yamlImg.Image, yamlImg.Platform.OS, yamlImg.Platform.Architecture)
 		}
-		mfstData, repoInfo, err := getImageData(dockerCli, img.Image)
+		// []ImgManifestInspect, *registry.RepositoryInfo, error
+		mfstData, repoInfo, err := getImageData(dockerCli, yamlImg.Image)
 		if err != nil {
-			return fmt.Errorf("Inspect of image %q failed with error: %v", img.Image, err)
+			return fmt.Errorf("Inspect of image %q failed with error: %v", yamlImg.Image, err)
 		}
 		if repoInfo.Hostname() != targetRepo.Hostname() {
 			return fmt.Errorf("Cannot use source images from a different registry than the target image: %s != %s", repoInfo.Hostname(), targetRepo.Hostname())
@@ -156,34 +157,34 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts) error {
 			return fmt.Errorf("You specified a manifest list entry from a digest that points to a current manifest list. Manifest lists do not allow recursion.")
 		}
 		// the non-manifest list case will always have exactly one manifest response
-		imgMfst := mfstData[0]
+		mfstInspect := mfstData[0]
 
 		manifest := manifestlist.ManifestDescriptor{
-			Platform: img.Platform,
+			Platform: yamlImg.Platform,
 		}
-		manifest.Descriptor.Digest, err = digest.ParseDigest(imgMfst.Digest)
-		manifest.Size = imgMfst.Size
-		manifest.MediaType = imgMfst.MediaType
+		manifest.Descriptor.Digest, err = digest.ParseDigest(mfstInspect.Digest)
+		manifest.Size = mfstInspect.Size
+		manifest.MediaType = mfstInspect.MediaType
 
 		if err != nil {
-			return fmt.Errorf("Digest parse of image %q failed with error: %v", img.Image, err)
+			return fmt.Errorf("Digest parse of image %q failed with error: %v", yamlImg.Image, err)
 		}
-		logrus.Infof("Image %q is digest %s; size: %d", img.Image, imgMfst.Digest, imgMfst.Size)
+		logrus.Infof("Image %q is digest %s; size: %d", yamlImg.Image, mfstInspect.Digest, mfstInspect.Size)
 
 		// if this image is in a different repo, we need to add the layer/blob digests to the list of
 		// requested blob mounts (cross-repository push) before pushing the manifest list
 		if repoName != repoInfo.RemoteName() {
-			logrus.Debugf("Adding layers of %q to blob mount requests", img.Image)
-			for _, layer := range imgMfst.Layers {
+			logrus.Debugf("Adding layers of %q to blob mount requests", yamlImg.Image)
+			for _, layer := range mfstInspect.Layers {
 				blobMountRequests = append(blobMountRequests, blobMount{FromRepo: repoInfo.RemoteName(), Digest: layer})
 			}
 			// also must add the manifest to be pushed in the target namespace
 			logrus.Debugf("Adding manifest %q -> to be pushed to %q as a manifest reference", repoInfo.RemoteName(), repoName)
 			manifestRequests = append(manifestRequests, manifestPush{
 				Name:      repoInfo.RemoteName(),
-				Digest:    imgMfst.Digest,
-				JSONBytes: imgMfst.CanonicalJSON,
-				MediaType: imgMfst.MediaType,
+				Digest:    mfstInspect.Digest,
+				JSONBytes: mfstInspect.CanonicalJSON,
+				MediaType: mfstInspect.MediaType,
 			})
 		}
 		manifestList.Manifests = append(manifestList.Manifests, manifest)
