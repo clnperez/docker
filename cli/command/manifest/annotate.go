@@ -26,9 +26,10 @@ import (
 )
 
 type annotateOptions struct {
-	remote   string
-	variants []string
-	features []string
+	remote      string
+	variant     string
+	cpuFeatures []string
+	osFeatures  []string
 }
 
 // NewAnnotateCommand creates a new `docker manifest inspect` command
@@ -49,8 +50,10 @@ func newAnnotateCommand(dockerCli *command.DockerCli) *cobra.Command {
 
 	// @TODO: Should we do any validation? We can't have an exhaustive list
 	// of features, but at least check for only a csv of alpha-chars?
-	flags.StringSliceVarP(&opts.features, "features", "f", []string{}, "Add feature metadata to a manifest before pushing it.")
-	flags.StringSliceVarP(&opts.variants, "variants", "v", []string{}, "Add arch variants to a manifest before pushing it.")
+	flags.StringSliceVarP(&opts.cpuFeatures, "cpuFeatures", "c", []string{}, "Add feature metadata to a manifest before pushing it.")
+	// @TODO: Maybe no shorthand? These are bad =D
+	flags.StringSliceVarP(&opts.osFeatures, "osFeatures", "o", []string{}, "Add feature metadata to a manifest before pushing it.")
+	flags.StringVarP(&opts.variant, "variant", "v", "", "Add arch variant to a manifest before pushing it.")
 
 	command.AddTrustedFlags(flags, true)
 
@@ -58,15 +61,6 @@ func newAnnotateCommand(dockerCli *command.DockerCli) *cobra.Command {
 }
 
 func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) error {
-
-	/*
-		for _, flag := range opts.features {
-			fmt.Printf("Feature flags:%s \n", flag)
-		}
-		for _, flag := range opts.variants {
-			fmt.Printf("Variant flags:%s \n", flag)
-		}
-	*/
 
 	var (
 		fd      *os.File
@@ -115,7 +109,7 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 		return err
 	}
 
-	theBytes := make([]byte, 1000)
+	theBytes := make([]byte, 10000)
 	numRead, err := fd.Read(theBytes)
 	if err != nil {
 		fmt.Printf("Error reading %s: %s\n", newFile, err)
@@ -127,13 +121,34 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 		return err
 	}
 
-	// Change the json
+	// Update the mf
+	// @TODO: Verification?
+	if len(opts.cpuFeatures) > 0 {
+		newMf.Platform.Features = append(mf.Platform.Features, opts.cpuFeatures...)
+	}
+	if len(opts.osFeatures) > 0 {
+		newMf.Platform.OSFeatures = append(mf.Platform.OSFeatures, opts.osFeatures...)
+	}
+	if opts.variant != "" {
+		newMf.Platform.Variant = opts.variant
+	}
 
-	// Rewrite the file
-	//if _, err := fd.Write(newMf.CanonicalJSON); err != nil {
-	//	fmt.Printf("Error writing to file: %s", err)
-	//	return err
-	//}
+	theBytes, err = json.Marshal(newMf)
+	if err != nil {
+		fmt.Printf("Marshaling error: %s\n", err)
+		return err
+	}
+
+	//Rewrite the file
+	fd2, err := os.Create(newFile)
+	if err != nil {
+		fmt.Printf("Error opening file: %s", err)
+		return err
+	}
+	if _, err := fd2.Write(theBytes); err != nil {
+		fmt.Printf("Error writing to file: %s", err)
+		return err
+	}
 
 	return nil
 }
