@@ -117,7 +117,8 @@ func storeManifest(imgInspect []ImgManifestInspect, overwrite bool) error {
 		}
 
 		defer fd.Close()
-		if _, err = fd.Write(mf.CanonicalJSON); err != nil {
+		marshalledMf, err := json.Marshal(mf)
+		if _, err = fd.Write(marshalledMf); err != nil {
 			fmt.Printf("Error writing to file: %s", err)
 			return err
 		}
