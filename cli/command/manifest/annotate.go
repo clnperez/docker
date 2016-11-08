@@ -1,11 +1,16 @@
 package manifest
 
 import (
-	//"encoding/json"
+	"encoding/json"
+	//"errors"
 	"fmt"
+	"os"
+	"os/user"
+	"strings"
+
+	"github.com/Sirupsen/logrus"
 
 	/*
-		"github.com/Sirupsen/logrus"
 		"golang.org/x/net/context"
 
 		"github.com/docker/distribution/registry/api/errcode"
@@ -53,12 +58,82 @@ func newAnnotateCommand(dockerCli *command.DockerCli) *cobra.Command {
 }
 
 func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) error {
-	for _, flag := range opts.features {
-		fmt.Printf("Feature flags:%s \n", flag)
+
+	/*
+		for _, flag := range opts.features {
+			fmt.Printf("Feature flags:%s \n", flag)
+		}
+		for _, flag := range opts.variants {
+			fmt.Printf("Variant flags:%s \n", flag)
+		}
+	*/
+
+	var (
+		fd      *os.File
+		curUser *user.User
+	)
+
+	// Make sure the manifests are pulled, find the file you need, unmarshal the json, edit the file, and done.
+	imgInspect, _, err := getImageData(dockerCli, opts.remote)
+	if err != nil {
+		return err
 	}
-	for _, flag := range opts.variants {
-		fmt.Printf("Variant flags:%s \n", flag)
+
+	if len(imgInspect) != 1 {
+		return fmt.Errorf("Cannot annotate manifest list. Please pass an image name")
 	}
+
+	if err := storeManifest(imgInspect, false); err != nil {
+		fmt.Printf("Error storing manifests for annotating: %s\n", err)
+		return err
+	}
+
+	mf := imgInspect[0]
+	if curUser, err = user.Current(); err != nil {
+		fmt.Errorf("Error retreiving user: %s", err)
+		return err
+	}
+	dir := fmt.Sprintf("%s/.docker/manifests/", curUser.HomeDir)
+	// Use the digest as the filename. First strip the prefix.
+	newFile := fmt.Sprintf("%s%s", dir, strings.Split(mf.Digest, ":")[1])
+	fileInfo, err := os.Stat(newFile)
+	if err != nil || os.IsNotExist(err) {
+		logrus.Debugf("Something went wrong trying to locate the manifest file: %s", err)
+		return err
+	}
+	if fileInfo == nil {
+		fmt.Print("This shouldn't be possible. Assert?\n")
+	}
+
+	// Now unmarshal the json
+	var newMf ImgManifestInspect
+	defer fd.Close()
+
+	fd, err = os.Open(newFile)
+	if err != nil {
+		fmt.Printf("Error Opening manifest file: %s/n", err)
+		return err
+	}
+
+	theBytes := make([]byte, 1000)
+	numRead, err := fd.Read(theBytes)
+	if err != nil {
+		fmt.Printf("Error reading %s: %s\n", newFile, err)
+		return err
+	}
+
+	if err := json.Unmarshal(theBytes[:numRead], &newMf); err != nil {
+		fmt.Printf("Unmarshal error: %s\n", err)
+		return err
+	}
+
+	// Change the json
+
+	// Rewrite the file
+	//if _, err := fd.Write(newMf.CanonicalJSON); err != nil {
+	//	fmt.Printf("Error writing to file: %s", err)
+	//	return err
+	//}
 
 	return nil
 }
