@@ -1,25 +1,9 @@
 package manifest
 
 import (
-	"encoding/json"
-	//"errors"
 	"fmt"
-	"os"
-	"os/user"
-	"strings"
 
-	"github.com/Sirupsen/logrus"
-
-	/*
-		"golang.org/x/net/context"
-
-		"github.com/docker/distribution/registry/api/errcode"
-		"github.com/docker/distribution/registry/client"
-		"github.com/docker/docker/api/types"
-		"github.com/docker/docker/cli"
-		"github.com/docker/docker/dockerversion"
-		"github.com/docker/docker/image"
-	*/
+	//"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/cli"
 	"github.com/docker/docker/cli/command"
 	"github.com/spf13/cobra"
@@ -62,11 +46,6 @@ func newAnnotateCommand(dockerCli *command.DockerCli) *cobra.Command {
 
 func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) error {
 
-	var (
-		fd      *os.File
-		curUser *user.User
-	)
-
 	// Make sure the manifests are pulled, find the file you need, unmarshal the json, edit the file, and done.
 	imgInspect, _, err := getImageData(dockerCli, opts.remote)
 	if err != nil {
@@ -83,46 +62,21 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 	}
 
 	mf := imgInspect[0]
-	if curUser, err = user.Current(); err != nil {
-		fmt.Errorf("Error retreiving user: %s", err)
-		return err
-	}
-	dir := fmt.Sprintf("%s/.docker/manifests/", curUser.HomeDir)
-	// Use the digest as the filename. First strip the prefix.
-	newFile := fmt.Sprintf("%s%s", dir, strings.Split(mf.Digest, ":")[1])
-	fileInfo, err := os.Stat(newFile)
-	if err != nil || os.IsNotExist(err) {
-		logrus.Debugf("Something went wrong trying to locate the manifest file: %s", err)
-		return err
-	}
-	if fileInfo == nil {
-		fmt.Print("This shouldn't be possible. Assert?\n")
-	}
 
-	// Now unmarshal the json
-	var newMf ImgManifestInspect
+	fd, err := getManifestFd(mf.Digest)
+	if err != nil {
+		fmt.Printf("Error getting mf fd: %s", err)
+		return err
+	}
 	defer fd.Close()
-
-	fd, err = os.Open(newFile)
+	newMf, err := unmarshalIntoManifestInspect(fd)
 	if err != nil {
-		fmt.Printf("Error Opening manifest file: %s/n", err)
-		return err
-	}
-
-	theBytes := make([]byte, 10000)
-	numRead, err := fd.Read(theBytes)
-	if err != nil {
-		fmt.Printf("Error reading %s: %s\n", newFile, err)
-		return err
-	}
-
-	if err := json.Unmarshal(theBytes[:numRead], &newMf); err != nil {
-		fmt.Printf("Unmarshal error: %s\n", err)
+		fmt.Printf("Error unmarshaling mf from fd: %s", err)
 		return err
 	}
 
 	// Update the mf
-	// @TODO: Verification?
+	// @TODO: Verification? Move the one from create to here?
 	if len(opts.cpuFeatures) > 0 {
 		newMf.Platform.Features = append(mf.Platform.Features, opts.cpuFeatures...)
 	}
@@ -133,20 +87,7 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 		newMf.Platform.Variant = opts.variant
 	}
 
-	theBytes, err = json.Marshal(newMf)
-	if err != nil {
-		fmt.Printf("Marshaling error: %s\n", err)
-		return err
-	}
-
-	//Rewrite the file
-	fd2, err := os.Create(newFile)
-	if err != nil {
-		fmt.Printf("Error opening file: %s", err)
-		return err
-	}
-	if _, err := fd2.Write(theBytes); err != nil {
-		fmt.Printf("Error writing to file: %s", err)
+	if err := updateMfFile(newMf); err != nil {
 		return err
 	}
 
