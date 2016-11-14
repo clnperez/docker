@@ -3,16 +3,14 @@ package manifest
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
-	"path/filepath"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/go-yaml/yaml"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 
@@ -31,7 +29,8 @@ import (
 )
 
 type createOpts struct {
-	Path string
+	newRef    string
+	manifests []string
 }
 
 type existingTokenHandler struct {
@@ -88,46 +87,36 @@ func newCreateListCommand(dockerCli *command.DockerCli) *cobra.Command {
 	opts := createOpts{}
 
 	cmd := &cobra.Command{
-		Use:   "create [OPTIONS] path_to_manifest_list.yaml",
+		Use:   "create --name newRef manifest [manifests...]",
 		Short: "Push a manifest list for an image to a repository",
 		Args:  cli.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			opts.Path = args[0]
+			opts.manifests = args
 			return putManifestList(dockerCli, opts)
 		},
 	}
+
+	flags := cmd.Flags()
+	flags.StringVarP(&opts.newRef, "name", "n", "", "")
 	return cmd
 }
 
 func putManifestList(dockerCli *command.DockerCli, opts createOpts) error {
 	var (
-		yamlInput         YAMLInput
 		manifestList      manifestlist.ManifestList
 		blobMountRequests []blobMount
 		manifestRequests  []manifestPush
+		fd                *os.File
+		err               error
 	)
 
-	filename, err := filepath.Abs(opts.Path)
+	targetRef, err := reference.ParseNamed(opts.newRef)
 	if err != nil {
-		return fmt.Errorf("Can't resolve path to %q: %v", opts.Path, err)
-	}
-	yamlFile, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return fmt.Errorf("Can't read YAML file %q: %v", opts.Path, err)
-	}
-	err = yaml.Unmarshal(yamlFile, &yamlInput)
-	if err != nil {
-		return fmt.Errorf("Can't unmarshal YAML file %q: %v", opts.Path, err)
-	}
-
-	// process the final image name reference for the manifest list
-	targetRef, err := reference.ParseNamed(yamlInput.Image)
-	if err != nil {
-		return fmt.Errorf("Error parsing name for manifest list (%s): %v", yamlInput.Image, err)
+		return fmt.Errorf("Error parsing name for manifest list (%s): %v", opts.newRef, err)
 	}
 	targetRepo, err := registry.ParseRepositoryInfo(targetRef)
 	if err != nil {
-		return fmt.Errorf("Error parsing repository name for manifest list (%s): %v", yamlInput.Image, err)
+		return fmt.Errorf("Error parsing repository name for manifest list (%s): %v", opts.newRef, err)
 	}
 	targetEndpoint, repoName, err := setupRepo(targetRepo)
 	if err != nil {
@@ -138,43 +127,60 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts) error {
 
 	// Now create the manifest list payload by looking up the manifest schemas
 	// for the constituent images:
+
+	// @TODO: Pull from local files. Create func to do that (and use it in inspect as well.)
 	logrus.Info("Retrieving digests of images...")
-	for _, yamlImg := range yamlInput.Manifests {
-		// validate os/arch input
-		if !isValidOSArch(yamlImg.Platform.OS, yamlImg.Platform.Architecture) {
-			return fmt.Errorf("Manifest entry for image %s has unsupported os/arch combination: %s/%s", yamlImg.Image, yamlImg.Platform.OS, yamlImg.Platform.Architecture)
-		}
-		// []ImgManifestInspect, *registry.RepositoryInfo, error
-		mfstData, repoInfo, err := getImageData(dockerCli, yamlImg.Image)
-		if err != nil {
-			return fmt.Errorf("Inspect of image %q failed with error: %v", yamlImg.Image, err)
-		}
+	for _, manifestRef := range opts.manifests {
+
+		mfstData, repoInfo, err := getImageData(dockerCli, manifestRef)
 		if repoInfo.Hostname() != targetRepo.Hostname() {
 			return fmt.Errorf("Cannot use source images from a different registry than the target image: %s != %s", repoInfo.Hostname(), targetRepo.Hostname())
 		}
+		// Was this already fetched/annotated?
+		// Check, and if not, store it
+		fd, err = nil, nil
+		for fd != nil && err != nil {
+			fd, err := getManifestFd(manifestRef)
+			if err != nil {
+				fmt.Printf("Create list: Error retrieving local info for %s: %e", manifestRef, err)
+				return err
+			}
+			if fd == nil {
+				storeManifest(mfstData, false)
+			}
+			fmt.Print("fd retrieved for using to push\n")
+		}
+
+		mfstInspect, err := unmarshalIntoManifestInspect(fd)
+		if err != nil {
+			fmt.Printf("Create list: Marshal error for %s: %e", manifestRef, err)
+			return err
+		}
+
+		// validate os/arch input @TODO: Move this to the annotate step
+		//if !isValidOSArch(yamlImg.Platform.OS, yamlImg.Platform.Architecture) {
+		//	return fmt.Errorf("Manifest entry for image %s has unsupported os/arch combination: %s/%s", yamlImg.Image, yamlImg.Platform.OS, yamlImg.Platform.Architecture)
+		//}
+
+		/* I don't think this is possible any more...
 		if len(mfstData) > 1 {
 			// too many responses--can only happen if a manifest list was returned for the name lookup
 			return fmt.Errorf("You specified a manifest list entry from a digest that points to a current manifest list. Manifest lists do not allow recursion.")
-		}
-		// the non-manifest list case will always have exactly one manifest response
-		mfstInspect := mfstData[0]
+		} */
 
 		manifest := manifestlist.ManifestDescriptor{
-			Platform: yamlImg.Platform,
+			Platform: mfstInspect.Platform,
 		}
 		manifest.Descriptor.Digest, err = digest.ParseDigest(mfstInspect.Digest)
 		manifest.Size = mfstInspect.Size
 		manifest.MediaType = mfstInspect.MediaType
 
-		if err != nil {
-			return fmt.Errorf("Digest parse of image %q failed with error: %v", yamlImg.Image, err)
-		}
-		logrus.Infof("Image %q is digest %s; size: %d", yamlImg.Image, mfstInspect.Digest, mfstInspect.Size)
+		logrus.Infof("Image %q is digest %s; size: %d", mfstInspect.Tag, mfstInspect.Digest, mfstInspect.Size)
 
 		// if this image is in a different repo, we need to add the layer/blob digests to the list of
 		// requested blob mounts (cross-repository push) before pushing the manifest list
 		if repoName != repoInfo.RemoteName() {
-			logrus.Debugf("Adding layers of %q to blob mount requests", yamlImg.Image)
+			logrus.Debugf("Adding layers of %q to blob mount requests", mfstInspect.Tag)
 			for _, layer := range mfstInspect.Layers {
 				blobMountRequests = append(blobMountRequests, blobMount{FromRepo: repoInfo.RemoteName(), Digest: layer})
 			}

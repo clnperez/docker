@@ -5,8 +5,15 @@ package manifest
 // Added linux/s390x as we know System z support already exists
 
 import (
+	"encoding/json"
+	"fmt"
 	"hash/fnv"
+	"os"
+	"os/user"
 	"strconv"
+	"strings"
+
+	"github.com/Sirupsen/logrus"
 )
 
 type osArch struct {
@@ -56,4 +63,85 @@ func hashString(s string) string {
 	h := fnv.New32a()
 	h.Write([]byte(s))
 	return strconv.Itoa(int(h.Sum32()))
+}
+
+func getManifestFd(digest string) (*os.File, error) {
+
+	newFile, err := mfToFilename(digest)
+	if err != nil {
+		return nil, err
+	}
+
+	fileInfo, err := os.Stat(newFile)
+	if err != nil || os.IsNotExist(err) {
+		logrus.Debugf("Something went wrong trying to locate the manifest file: %s", err)
+		return nil, err
+	}
+	if fileInfo == nil {
+		fmt.Print("This shouldn't be possible. Assert?\n")
+	}
+
+	fd, err := os.Open(newFile)
+	if err != nil {
+		fmt.Printf("Error Opening manifest file: %s/n", err)
+		return nil, err
+	}
+
+	return fd, nil
+}
+
+func mfToFilename(digest string) (string, error) {
+
+	var (
+		curUser *user.User
+		err     error
+	)
+
+	if curUser, err = user.Current(); err != nil {
+		fmt.Errorf("Error retreiving user: %s", err)
+		return "", err
+	}
+	dir := fmt.Sprintf("%s/.docker/manifests/", curUser.HomeDir)
+	// Use the digest as the filename. First strip the prefix.
+	return fmt.Sprintf("%s%s", dir, strings.Split(digest, ":")[1]), nil
+}
+
+func unmarshalIntoManifestInspect(fd *os.File) (ImgManifestInspect, error) {
+
+	var newMf ImgManifestInspect
+	theBytes := make([]byte, 10000)
+	numRead, err := fd.Read(theBytes)
+	if err != nil {
+		fmt.Printf("Error reading file: %v", fd, err)
+		return ImgManifestInspect{}, err
+	}
+
+	if err := json.Unmarshal(theBytes[:numRead], &newMf); err != nil {
+		fmt.Printf("Unmarshal error: %s\n", err)
+		return ImgManifestInspect{}, err
+	}
+
+	return newMf, nil
+}
+
+func updateMfFile(mf ImgManifestInspect) error {
+	theBytes, err := json.Marshal(mf)
+	if err != nil {
+		fmt.Printf("Marshaling error: %s\n", err)
+		return err
+	}
+
+	newFile, _ := mfToFilename(mf.Digest)
+	//Rewrite the file
+	fd, err := os.Create(newFile)
+	defer fd.Close()
+	if err != nil {
+		fmt.Printf("Error opening file: %s", err)
+		return err
+	}
+	if _, err := fd.Write(theBytes); err != nil {
+		fmt.Printf("Error writing to file: %s", err)
+		return err
+	}
+	return nil
 }

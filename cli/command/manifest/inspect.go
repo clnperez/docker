@@ -61,20 +61,22 @@ func runListInspect(dockerCli *command.DockerCli, opts fetchOptions) error {
 	}
 
 	// output basic informative details about the image
-	if len(imgInspect) == 1 {
-		// this is a basic single manifest
-		fmt.Printf("%s: manifest type: %s\n", name, imgInspect[0].MediaType)
-		fmt.Printf("      Digest: %s\n", imgInspect[0].Digest)
-		fmt.Printf("Architecture: %s\n", imgInspect[0].Architecture)
-		fmt.Printf("          OS: %s\n", imgInspect[0].Os)
-		fmt.Printf("    # Layers: %d\n", len(imgInspect[0].Layers))
-		for i, digest := range imgInspect[0].Layers {
-			fmt.Printf("      layer %d: digest = %s\n", i+1, digest)
-		}
-		return nil
-	}
+	/*
+		if len(imgInspect) == 1 {
+			// this is a basic single manifest
+			fmt.Printf("%s: manifest type: %s\n", name, imgInspect[0].MediaType)
+			fmt.Printf("      Digest: %s\n", imgInspect[0].Digest)
+			fmt.Printf("Architecture: %s\n", imgInspect[0].Architecture)
+			fmt.Printf("          OS: %s\n", imgInspect[0].Os)
+			fmt.Printf("    # Layers: %d\n", len(imgInspect[0].Layers))
+			for i, digest := range imgInspect[0].Layers {
+				fmt.Printf("      layer %d: digest = %s\n", i+1, digest)
+			}
+			return nil
+		}*/
+
 	// More than one response. This is a manifest list.
-	fmt.Printf("%s is a manifest list containing the following %d manifest references:\n", name, len(imgInspect))
+	//fmt.Printf("%s is a manifest list containing the following %d manifest references:\n", name, len(imgInspect))
 	for i, img := range imgInspect {
 		fmt.Printf("%d    Mfst Type: %s\n", i+1, img.MediaType)
 		fmt.Printf("%d       Digest: %s\n", i+1, img.Digest)
