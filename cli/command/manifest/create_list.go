@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -106,8 +105,6 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts) error {
 		manifestList      manifestlist.ManifestList
 		blobMountRequests []blobMount
 		manifestRequests  []manifestPush
-		fd                *os.File
-		err               error
 	)
 
 	targetRef, err := reference.ParseNamed(opts.newRef)
@@ -132,29 +129,13 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts) error {
 	logrus.Info("Retrieving digests of images...")
 	for _, manifestRef := range opts.manifests {
 
-		mfstData, repoInfo, err := getImageData(dockerCli, manifestRef)
+		mfstData, repoInfo, err := getImageData(dockerCli, manifestRef, false)
+		if err != nil {
+			fmt.Printf("Create list: Error retrieving manifest for %s: %s:", manifestRef, err)
+			return err
+		}
 		if repoInfo.Hostname() != targetRepo.Hostname() {
 			return fmt.Errorf("Cannot use source images from a different registry than the target image: %s != %s", repoInfo.Hostname(), targetRepo.Hostname())
-		}
-		// Was this already fetched/annotated?
-		// Check, and if not, store it
-		fd, err = nil, nil
-		for fd != nil && err != nil {
-			fd, err := getManifestFd(manifestRef)
-			if err != nil {
-				fmt.Printf("Create list: Error retrieving local info for %s: %e", manifestRef, err)
-				return err
-			}
-			if fd == nil {
-				storeManifest(mfstData, false)
-			}
-			fmt.Print("fd retrieved for using to push\n")
-		}
-
-		mfstInspect, err := unmarshalIntoManifestInspect(fd)
-		if err != nil {
-			fmt.Printf("Create list: Marshal error for %s: %e", manifestRef, err)
-			return err
 		}
 
 		// validate os/arch input @TODO: Move this to the annotate step
@@ -162,12 +143,12 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts) error {
 		//	return fmt.Errorf("Manifest entry for image %s has unsupported os/arch combination: %s/%s", yamlImg.Image, yamlImg.Platform.OS, yamlImg.Platform.Architecture)
 		//}
 
-		/* I don't think this is possible any more...
 		if len(mfstData) > 1 {
 			// too many responses--can only happen if a manifest list was returned for the name lookup
 			return fmt.Errorf("You specified a manifest list entry from a digest that points to a current manifest list. Manifest lists do not allow recursion.")
-		} */
+		}
 
+		mfstInspect := mfstData[0]
 		manifest := manifestlist.ManifestDescriptor{
 			Platform: mfstInspect.Platform,
 		}
