@@ -7,10 +7,8 @@ package manifest
 import (
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
 	"os"
 	"os/user"
-	"strconv"
 	"strings"
 
 	"github.com/Sirupsen/logrus"
@@ -59,12 +57,6 @@ func isValidOSArch(os string, arch string) bool {
 	return ok
 }
 
-func hashString(s string) string {
-	h := fnv.New32a()
-	h.Write([]byte(s))
-	return strconv.Itoa(int(h.Sum32()))
-}
-
 func getManifestFd(digest string) (*os.File, error) {
 
 	newFile, err := mfToFilename(digest)
@@ -73,14 +65,23 @@ func getManifestFd(digest string) (*os.File, error) {
 	}
 
 	fileInfo, err := os.Stat(newFile)
-	if err != nil || os.IsNotExist(err) {
+	if err != nil && !os.IsNotExist(err) {
 		logrus.Debugf("Something went wrong trying to locate the manifest file: %s", err)
 		return nil, err
 	}
-	if fileInfo == nil {
-		fmt.Print("This shouldn't be possible. Assert?\n")
-	}
 
+	if fileInfo == nil {
+		// Don't create a new one
+		/*
+			fd, err := os.Create(newFile)
+			if err != nil {
+				fmt.Printf("Error creating %s: %s/n", newFile, err)
+				return nil, err
+			}
+			return fd, nil
+		*/
+		return nil, nil
+	}
 	fd, err := os.Open(newFile)
 	if err != nil {
 		fmt.Printf("Error Opening manifest file: %s/n", err)
@@ -112,7 +113,7 @@ func unmarshalIntoManifestInspect(fd *os.File) (ImgManifestInspect, error) {
 	theBytes := make([]byte, 10000)
 	numRead, err := fd.Read(theBytes)
 	if err != nil {
-		fmt.Printf("Error reading file: %v", fd, err)
+		fmt.Printf("Error reading file: %v\n", fd, err)
 		return ImgManifestInspect{}, err
 	}
 

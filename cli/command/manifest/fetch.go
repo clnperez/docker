@@ -61,7 +61,7 @@ func newListFetchCommand(dockerCli *command.DockerCli) *cobra.Command {
 func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 	// Get the data and then format it
 	name := opts.remote
-	imgInspect, _, err := getImageData(dockerCli, name)
+	imgInspect, _, err := getImageData(dockerCli, name, true)
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -74,13 +74,10 @@ func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 		return nil
 	}
 
-	if err := storeManifest(imgInspect, true); err != nil {
-		return err
-	}
 	return nil
 }
 
-func storeManifest(imgInspect []ImgManifestInspect, overwrite bool) error {
+func storeManifest(imgInspect *[]ImgManifestInspect, overwrite bool) error {
 	// Store this image so that it can be annotated.
 
 	var (
@@ -98,40 +95,36 @@ func storeManifest(imgInspect []ImgManifestInspect, overwrite bool) error {
 	// @TODO: Will this always exist?
 	newDir = fmt.Sprintf("%s/.docker/manifests/", curUser.HomeDir)
 	os.Mkdir(newDir, 0755)
-	for _, mf := range imgInspect {
-		// Use the digest as the filename. First strip the prefix.
-		newFile := fmt.Sprintf("%s%s", newDir, strings.Split(mf.Digest, ":")[1])
-		fileInfo, err := os.Stat(newFile)
-		if err != nil && !os.IsNotExist(err) {
-			logrus.Debugf("Something went wrong trying to stat the manifest file: %s", err)
+	for i, mf := range *imgInspect {
+		fd, err = getManifestFd(mf.Digest)
+		defer fd.Close()
+		if err != nil {
+			fmt.Printf("Store manifests: getManifestFd err: %s\n", err)
 			return err
 		}
-		if fileInfo != nil && overwrite == false {
+		if fd != nil && overwrite == false {
 			logrus.Debug("Not overwriting existing manifest file")
-			continue
-		} else {
-			if fd, err = os.Create(newFile); err != nil {
-				logrus.Debugf("Error creating file: %s", err)
+			localMfstInspect, err := unmarshalIntoManifestInspect(fd)
+			if err != nil {
+				fmt.Printf("Store: Marshal error for %s: %e\n", mf.Tag, err)
 				return err
 			}
-		}
-
-		defer fd.Close()
-		marshalledMf, err := json.Marshal(mf)
-		if _, err = fd.Write(marshalledMf); err != nil {
-			fmt.Printf("Error writing to file: %s", err)
-			return err
+			(*imgInspect)[i] = localMfstInspect
+			continue
+		} else {
+			if err = updateMfFile(mf); err != nil {
+				// update overwrites, so can be used to make a new copy
+				fmt.Printf("Error writing new local manifest copy: %s\n", err)
+				return err
+			}
 		}
 	}
 
 	return nil
 }
 
-func getImageData(dockerCli *command.DockerCli, name string) ([]ImgManifestInspect, *registry.RepositoryInfo, error) {
+func getImageData(dockerCli *command.DockerCli, name string, overwrite bool) ([]ImgManifestInspect, *registry.RepositoryInfo, error) {
 	// Pull from repo.
-
-	// @TODO: Check local cache first (though, by name only could still result in
-	// some lookups if a different name was used)
 
 	if _, _, err := reference.ParseIDOrReference(name); err != nil {
 		return nil, nil, fmt.Errorf("Error parsing reference: %s\n", err)
@@ -234,11 +227,14 @@ func getImageData(dockerCli *command.DockerCli, name string) ([]ImgManifestInspe
 			return nil, nil, err
 		}
 
+		if err := storeManifest(&foundImages, overwrite); err != nil {
+			logrus.Errorf("Error storing manifests: %s\n", err)
+		}
 		return foundImages, repoInfo, nil
 	}
 
 	if lastErr == nil {
-		lastErr = fmt.Errorf("no endpoints found for %s", namedRef.String())
+		lastErr = fmt.Errorf("no endpoints found for %s\n", namedRef.String())
 	}
 
 	return nil, nil, lastErr

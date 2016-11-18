@@ -42,7 +42,7 @@ func runListInspect(dockerCli *command.DockerCli, opts fetchOptions) error {
 	)
 
 	name := opts.remote
-	imgInspect, _, err := getImageData(dockerCli, name)
+	imgInspect, _, err := getImageData(dockerCli, name, false)
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -53,11 +53,6 @@ func runListInspect(dockerCli *command.DockerCli, opts fetchOptions) error {
 		}
 		fmt.Println(string(out))
 		return nil
-	}
-
-	// Don't overwrite local copies on inspect.
-	if err := storeManifest(imgInspect, false); err != nil {
-		return err
 	}
 
 	// output basic informative details about the image
