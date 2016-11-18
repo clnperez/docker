@@ -47,18 +47,13 @@ func newAnnotateCommand(dockerCli *command.DockerCli) *cobra.Command {
 func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) error {
 
 	// Make sure the manifests are pulled, find the file you need, unmarshal the json, edit the file, and done.
-	imgInspect, _, err := getImageData(dockerCli, opts.remote)
+	imgInspect, _, err := getImageData(dockerCli, opts.remote, false)
 	if err != nil {
 		return err
 	}
 
 	if len(imgInspect) != 1 {
 		return fmt.Errorf("Cannot annotate manifest list. Please pass an image name")
-	}
-
-	if err := storeManifest(imgInspect, false); err != nil {
-		fmt.Printf("Error storing manifests for annotating: %s\n", err)
-		return err
 	}
 
 	mf := imgInspect[0]
