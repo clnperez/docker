@@ -52,8 +52,8 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 		return err
 	}
 
-	if len(imgInspect) != 1 {
-		return fmt.Errorf("Cannot annotate manifest list. Please pass an image name")
+	if len(imgInspect) > 1 {
+		return fmt.Errorf("Cannot annotate manifest list. Please pass an image (not list) name")
 	}
 
 	mf := imgInspect[0]
@@ -72,6 +72,7 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 
 	// Update the mf
 	// @TODO: Verification? Move the one from create to here?
+	// @TODO: Prevent duplicates
 	if len(opts.cpuFeatures) > 0 {
 		newMf.Platform.Features = append(mf.Platform.Features, opts.cpuFeatures...)
 	}
