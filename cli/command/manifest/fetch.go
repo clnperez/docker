@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -87,10 +88,17 @@ func storeManifest(imgInspect *[]ImgManifestInspect, overwrite bool) error {
 		fd      *os.File
 	)
 
+	// This seems overkill, but for now, to avoid a panic on a staticly-linked binary, lock this goroutine to its current thread.
+	// See https://github.com/golang/go/issues/13470#issuecomment-162622286
+	// estesp worked around this for userns uid lookups but that is if you have an id already:
+	// https://github.com/docker/docker/issues/20191#issuecomment-255209782
+	// But we might not even store these this way, so, figure it out in design review.
+	runtime.LockOSThread()
 	if curUser, err = user.Current(); err != nil {
 		fmt.Errorf("Error retreiving user: %s", err)
 		return err
 	}
+	runtime.UnlockOSThread()
 
 	// @TODO: Will this always exist?
 	newDir = fmt.Sprintf("%s/.docker/manifests/", curUser.HomeDir)
