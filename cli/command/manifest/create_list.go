@@ -28,8 +28,7 @@ import (
 )
 
 type createOpts struct {
-	newRef    string
-	manifests []string
+	newRef string
 }
 
 type existingTokenHandler struct {
@@ -86,12 +85,11 @@ func newCreateListCommand(dockerCli *command.DockerCli) *cobra.Command {
 	opts := createOpts{}
 
 	cmd := &cobra.Command{
-		Use:   "create --name newRef manifest [manifests...]",
+		Use:   "create --name newRef manifest [manifest...]",
 		Short: "Push a manifest list for an image to a repository",
-		Args:  cli.ExactArgs(1),
+		Args:  cli.RequiresMinArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			opts.manifests = args
-			return putManifestList(dockerCli, opts)
+			return putManifestList(dockerCli, opts, args)
 		},
 	}
 
@@ -100,7 +98,7 @@ func newCreateListCommand(dockerCli *command.DockerCli) *cobra.Command {
 	return cmd
 }
 
-func putManifestList(dockerCli *command.DockerCli, opts createOpts) error {
+func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []string) error {
 	var (
 		manifestList      manifestlist.ManifestList
 		blobMountRequests []blobMount
@@ -127,7 +125,7 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts) error {
 
 	// @TODO: Pull from local files. Create func to do that (and use it in inspect as well.)
 	logrus.Info("Retrieving digests of images...")
-	for _, manifestRef := range opts.manifests {
+	for _, manifestRef := range manifests {
 
 		mfstData, repoInfo, err := getImageData(dockerCli, manifestRef, false)
 		if err != nil {
