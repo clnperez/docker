@@ -149,13 +149,17 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 		manifest.Size = mfstInspect.Size
 		manifest.MediaType = mfstInspect.MediaType
 
+		if err != nil {
+			return fmt.Errorf("Digest parse of image %q failed with error: %v", manifestRef, err)
+		}
+
 		logrus.Infof("Image %q is digest %s; size: %d", manifestRef, mfstInspect.Digest, mfstInspect.Size)
 		fmt.Printf("Image manifest is: %s\n", manifest)
 
 		// if this image is in a different repo, we need to add the layer/blob digests to the list of
 		// requested blob mounts (cross-repository push) before pushing the manifest list
 		if repoName != repoInfo.RemoteName() {
-			logrus.Debugf("Adding layers of %q to blob mount requests", mfstInspect.Tag)
+			logrus.Debugf("Adding layers of %q to blob mount requests", manifestRef)
 			for _, layer := range mfstInspect.Layers {
 				blobMountRequests = append(blobMountRequests, blobMount{FromRepo: repoInfo.RemoteName(), Digest: layer})
 			}
