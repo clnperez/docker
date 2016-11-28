@@ -136,11 +136,6 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 			return fmt.Errorf("Cannot use source images from a different registry than the target image: %s != %s", repoInfo.Hostname(), targetRepo.Hostname())
 		}
 
-		// validate os/arch input @TODO: Move this to the annotate step
-		//if !isValidOSArch(yamlImg.Platform.OS, yamlImg.Platform.Architecture) {
-		//	return fmt.Errorf("Manifest entry for image %s has unsupported os/arch combination: %s/%s", yamlImg.Image, yamlImg.Platform.OS, yamlImg.Platform.Architecture)
-		//}
-
 		if len(mfstData) > 1 {
 			// too many responses--can only happen if a manifest list was returned for the name lookup
 			return fmt.Errorf("You specified a manifest list entry from a digest that points to a current manifest list. Manifest lists do not allow recursion.")
@@ -154,7 +149,8 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 		manifest.Size = mfstInspect.Size
 		manifest.MediaType = mfstInspect.MediaType
 
-		logrus.Infof("Image %q is digest %s; size: %d", mfstInspect.Tag, mfstInspect.Digest, mfstInspect.Size)
+		logrus.Infof("Image %q is digest %s; size: %d", manifestRef, mfstInspect.Digest, mfstInspect.Size)
+		fmt.Printf("Image manifest is: %s\n", manifest)
 
 		// if this image is in a different repo, we need to add the layer/blob digests to the list of
 		// requested blob mounts (cross-repository push) before pushing the manifest list
@@ -183,6 +179,7 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 		return fmt.Errorf("Can't create URL builder from endpoint (%s): %v", targetEndpoint.URL.String(), err)
 	}
 	pushURL, err := createManifestURLFromRef(targetRef, urlBuilder)
+	fmt.Printf("PUSH URL: %s\n", pushURL)
 	if err != nil {
 		return fmt.Errorf("Error setting up repository endpoint and references for %q: %v", targetRef, err)
 	}
@@ -204,6 +201,7 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 	}
 	putRequest.Header.Set("Content-Type", mediaType)
 
+	fmt.Printf("Put Request: %s\n", putRequest)
 	httpClient, err := getHTTPClient(ctx, dockerCli, targetRepo, targetEndpoint, repoName)
 	if err != nil {
 		return fmt.Errorf("Failed to setup HTTP client to repository: %v", err)
