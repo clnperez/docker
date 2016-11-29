@@ -71,7 +71,12 @@ func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 		if err != nil {
 			logrus.Fatal(err)
 		}
-		fmt.Println(string(out))
+		var prettyJSON bytes.Buffer
+		err = json.Indent(&prettyJSON, out, "", "\t")
+		if err != nil {
+			logrus.Fatal(err)
+		}
+		fmt.Println(string(prettyJSON.String()))
 		return nil
 	}
 
