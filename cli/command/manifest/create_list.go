@@ -205,6 +205,7 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 	}
 	putRequest.Header.Set("Content-Type", mediaType)
 
+	// @TODO: Support http if using insecure registry.
 	fmt.Printf("Put Request: %s\n", putRequest)
 	httpClient, err := getHTTPClient(ctx, dockerCli, targetRepo, targetEndpoint, repoName)
 	if err != nil {
