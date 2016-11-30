@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	//"fmt"
 
 	"github.com/docker/docker/pkg/integration/checker"
 	"github.com/go-check/check"
@@ -108,14 +108,9 @@ func (s *DockerManifestSuite) TestManifestFetchOnUnkownImage(c *check.C) {
 }
 
 func (s *DockerManifestSuite) TestManifestAnnotate(c *check.C) {
-	testRequires(c, DaemonIsLinux, RegistryHosting)
-	repoName := fmt.Sprintf("%v/dockermanifest/busybox", privateRegistryURLV2)
-	// tag & upload the busybox image to the private registry
-	_, rc := dockerCmd(c, "tag", "busybox", repoName)
-	c.Assert(rc, checker.Equals, 0)
-	_, rc = dockerCmd(c, "push", repoName)
-	c.Assert(rc, checker.Equals, 0)
-	_, rc = dockerCmd(c, "annotate", repoName, "--arch", "amd64", "--os", "linux", "--cpuFeatures", "sse")
+	testRequires(c, DaemonIsLinux)
+	// Since annotate changes a local manifest, no need for a registry
+	_, rc := dockerCmd(c, "manifest", "annotate", "busybox", "--arch", "amd64", "--os", "linux", "--cpuFeatures", "sse")
 	c.Assert(rc, checker.Equals, 0)
 }
 
