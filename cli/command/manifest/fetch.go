@@ -1,7 +1,6 @@
 package manifest
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/user"
@@ -29,7 +28,6 @@ import (
 
 type fetchOptions struct {
 	remote string
-	raw    bool
 }
 
 type manifestFetcher interface {
@@ -51,33 +49,15 @@ func newListFetchCommand(dockerCli *command.DockerCli) *cobra.Command {
 		},
 	}
 
-	flags := cmd.Flags()
-
-	flags.BoolVarP(&opts.raw, "raw", "r", false, "Provide raw JSON output")
-	command.AddTrustedFlags(flags, true)
-
 	return cmd
 }
 
 func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 	// Get the data and then format it
 	name := opts.remote
-	imgInspect, _, err := getImageData(dockerCli, name, true)
+	_, _, err := getImageData(dockerCli, name, true)
 	if err != nil {
 		logrus.Fatal(err)
-	}
-	if opts.raw == true {
-		out, err := json.Marshal(imgInspect)
-		if err != nil {
-			logrus.Fatal(err)
-		}
-		var prettyJSON bytes.Buffer
-		err = json.Indent(&prettyJSON, out, "", "\t")
-		if err != nil {
-			logrus.Fatal(err)
-		}
-		fmt.Println(string(prettyJSON.String()))
-		return nil
 	}
 
 	return nil

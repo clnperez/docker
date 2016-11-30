@@ -71,20 +71,10 @@ func getManifestFd(digest string) (*os.File, error) {
 	}
 
 	if fileInfo == nil {
-		// Don't create a new one
-		/*
-			fd, err := os.Create(newFile)
-			if err != nil {
-				fmt.Printf("Error creating %s: %s/n", newFile, err)
-				return nil, err
-			}
-			return fd, nil
-		*/
 		return nil, nil
 	}
 	fd, err := os.Open(newFile)
 	if err != nil {
-		fmt.Printf("Error Opening manifest file: %s/n", err)
 		return nil, err
 	}
 
@@ -113,12 +103,10 @@ func unmarshalIntoManifestInspect(fd *os.File) (ImgManifestInspect, error) {
 	theBytes := make([]byte, 10000)
 	numRead, err := fd.Read(theBytes)
 	if err != nil {
-		fmt.Printf("Error reading file: %v\n", fd, err)
 		return ImgManifestInspect{}, err
 	}
 
 	if err := json.Unmarshal(theBytes[:numRead], &newMf); err != nil {
-		fmt.Printf("Unmarshal error: %s\n", err)
 		return ImgManifestInspect{}, err
 	}
 
@@ -128,7 +116,6 @@ func unmarshalIntoManifestInspect(fd *os.File) (ImgManifestInspect, error) {
 func updateMfFile(mf ImgManifestInspect) error {
 	theBytes, err := json.Marshal(mf)
 	if err != nil {
-		fmt.Printf("Marshaling error: %s\n", err)
 		return err
 	}
 
@@ -137,11 +124,9 @@ func updateMfFile(mf ImgManifestInspect) error {
 	fd, err := os.Create(newFile)
 	defer fd.Close()
 	if err != nil {
-		fmt.Printf("Error opening file: %s", err)
 		return err
 	}
 	if _, err := fd.Write(theBytes); err != nil {
-		fmt.Printf("Error writing to file: %s", err)
 		return err
 	}
 	return nil

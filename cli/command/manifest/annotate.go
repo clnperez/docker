@@ -62,13 +62,11 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 
 	fd, err := getManifestFd(mf.Digest)
 	if err != nil {
-		fmt.Printf("Error getting mf fd: %s", err)
 		return err
 	}
 	defer fd.Close()
 	newMf, err := unmarshalIntoManifestInspect(fd)
 	if err != nil {
-		fmt.Printf("Error unmarshaling mf from fd: %s", err)
 		return err
 	}
 
@@ -98,8 +96,6 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 	if opts.variant != "" {
 		newMf.Platform.Variant = opts.variant
 	}
-
-	fmt.Printf("New Manifest: %s\n", newMf)
 
 	if err := updateMfFile(newMf); err != nil {
 		return err
