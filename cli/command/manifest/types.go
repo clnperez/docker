@@ -40,5 +40,5 @@ type ImgManifestInspect struct {
 	Os            string                    `json:os`
 	Layers        []string                  `json:layers`
 	Platform      manifestlist.PlatformSpec `json:platform`
-	CanonicalJSON []byte                    `json:"-"`
+	CanonicalJSON []byte                    `json:"json"`
 }

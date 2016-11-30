@@ -129,7 +129,6 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 
 		mfstData, repoInfo, err := getImageData(dockerCli, manifestRef, false)
 		if err != nil {
-			fmt.Printf("Create list: Error retrieving manifest for %s: %s:", manifestRef, err)
 			return err
 		}
 		if repoInfo.Hostname() != targetRepo.Hostname() {
@@ -154,7 +153,6 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 		}
 
 		logrus.Infof("Image %q is digest %s; size: %d", manifestRef, mfstInspect.Digest, mfstInspect.Size)
-		fmt.Printf("Image manifest is: %s\n", manifest)
 
 		// if this image is in a different repo, we need to add the layer/blob digests to the list of
 		// requested blob mounts (cross-repository push) before pushing the manifest list
@@ -183,7 +181,6 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 		return fmt.Errorf("Can't create URL builder from endpoint (%s): %v", targetEndpoint.URL.String(), err)
 	}
 	pushURL, err := createManifestURLFromRef(targetRef, urlBuilder)
-	fmt.Printf("PUSH URL: %s\n", pushURL)
 	if err != nil {
 		return fmt.Errorf("Error setting up repository endpoint and references for %q: %v", targetRef, err)
 	}
@@ -206,7 +203,6 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 	putRequest.Header.Set("Content-Type", mediaType)
 
 	// @TODO: Support http if using insecure registry.
-	fmt.Printf("Put Request: %s\n", putRequest)
 	httpClient, err := getHTTPClient(ctx, dockerCli, targetRepo, targetEndpoint, repoName)
 	if err != nil {
 		return fmt.Errorf("Failed to setup HTTP client to repository: %v", err)
@@ -237,7 +233,7 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Digest: %s\n", dgst)
+		logrus.Info("Succesfully pushed manifest list %s with digest %s", targetRef, dgst)
 		return nil
 	}
 	return fmt.Errorf("Registry push unsuccessful: response %d: %s", resp.StatusCode, resp.Status)

@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -12,9 +13,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type inspectOptions struct {
+	remote string
+	raw    bool
+}
+
 // NewInspectCommand creates a new `docker manifest inspect` command
 func newInspectCommand(dockerCli *command.DockerCli) *cobra.Command {
-	var opts fetchOptions
+	var opts inspectOptions
 
 	cmd := &cobra.Command{
 		Use:   "inspect [OPTIONS] NAME[:TAG]",
@@ -34,7 +40,7 @@ func newInspectCommand(dockerCli *command.DockerCli) *cobra.Command {
 	return cmd
 }
 
-func runListInspect(dockerCli *command.DockerCli, opts fetchOptions) error {
+func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 
 	// Get the data and then format it
 	var (
@@ -51,30 +57,36 @@ func runListInspect(dockerCli *command.DockerCli, opts fetchOptions) error {
 		if err != nil {
 			logrus.Fatal(err)
 		}
-		fmt.Println(string(out))
+		var prettyJSON bytes.Buffer
+		err = json.Indent(&prettyJSON, out, "", "\t")
+		if err != nil {
+			logrus.Fatal(err)
+		}
+		fmt.Println(string(prettyJSON.String()))
 		return nil
 	}
 
 	// output basic informative details about the image
-	/*
-		if len(imgInspect) == 1 {
-			// this is a basic single manifest
-			fmt.Printf("%s: manifest type: %s\n", name, imgInspect[0].MediaType)
-			fmt.Printf("      Digest: %s\n", imgInspect[0].Digest)
-			fmt.Printf("Architecture: %s\n", imgInspect[0].Architecture)
-			fmt.Printf("          OS: %s\n", imgInspect[0].Os)
-			fmt.Printf("    # Layers: %d\n", len(imgInspect[0].Layers))
-			for i, digest := range imgInspect[0].Layers {
-				fmt.Printf("      layer %d: digest = %s\n", i+1, digest)
-			}
-			return nil
-		}*/
+	if len(imgInspect) == 1 {
+		// this is a basic single manifest
+		fmt.Printf("%s: manifest type: %s\n", name, imgInspect[0].MediaType)
+		fmt.Printf("      Digest: %s\n", imgInspect[0].Digest)
+		fmt.Printf("Architecture: %s\n", imgInspect[0].Architecture)
+		fmt.Printf("          OS: %s\n", imgInspect[0].Os)
+		fmt.Printf("    # Layers: %d\n", len(imgInspect[0].Layers))
+		for i, digest := range imgInspect[0].Layers {
+			fmt.Printf("      layer %d: digest = %s\n", i+1, digest)
+		}
+		return nil
+	}
 
 	// More than one response. This is a manifest list.
 	//fmt.Printf("%s is a manifest list containing the following %d manifest references:\n", name, len(imgInspect))
 	for i, img := range imgInspect {
 		// @TODO: These tags are wonky. e.g.: "Repo Tags: 0ppc64le_hello-world,1library_hello-world"
-		fmt.Printf("%d    Repo Tags: %s,%s\n", i+1, img.RepoTags[0], img.RepoTags[1])
+		// There may be any number of repo tags here, so fix this or get an out of bounds error:
+		//fmt.Printf("%d    Repo Tags: %s,%s\n", i+1, img.RepoTags[0], img.RepoTags[1])
+		fmt.Printf("%d  Tag: %s\n", i+1, img.Tag)
 		fmt.Printf("%d    Mfst Type: %s\n", i+1, img.MediaType)
 		fmt.Printf("%d       Digest: %s\n", i+1, img.Digest)
 		fmt.Printf("%d  Mfst Length: %d\n", i+1, img.Size)
