@@ -46,13 +46,10 @@ func runPull(dockerCli *command.DockerCli, opts pullOptions) error {
 	if err != nil {
 		return err
 	}
-	// looks to see if it's going to pull all, and if the distribution ref doesn't just
-	// contain a repo name
-	fmt.Println("all of the opts are: ", opts.all)
 	if opts.all && !reference.IsNameOnly(distributionRef) {
 		return errors.New("tag can't be used with --all-tags/-a")
 	}
-	// looks to see if it's not going to pull all, and it only contains a repo name
+
 	if !opts.all && reference.IsNameOnly(distributionRef) {
 		distributionRef = reference.TagNameOnly(distributionRef)
 		if tagged, ok := distributionRef.(reference.Tagged); ok {
@@ -62,15 +59,13 @@ func runPull(dockerCli *command.DockerCli, opts pullOptions) error {
 
 	// Resolve the Repository name from fqn to RepositoryInfo
 	repoInfo, err := registry.ParseRepositoryInfo(distributionRef)
-	fmt.Println("repo info is : ", repoInfo)
 	if err != nil {
 		return err
 	}
 
 	ctx := context.Background()
-	fmt.Println("ctx here is : ", ctx)
+
 	authConfig := command.ResolveAuthConfig(ctx, dockerCli, repoInfo.Index)
-	fmt.Println("auth config is : ", authConfig)
 	requestPrivilege := command.RegistryAuthenticationPrivilegedFunc(dockerCli, repoInfo.Index, "pull")
 
 	// Check if reference has a digest
