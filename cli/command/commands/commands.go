@@ -7,6 +7,7 @@ import (
 	"github.com/docker/docker/cli/command/checkpoint"
 	"github.com/docker/docker/cli/command/container"
 	"github.com/docker/docker/cli/command/image"
+	"github.com/docker/docker/cli/command/manifest"
 	"github.com/docker/docker/cli/command/network"
 	"github.com/docker/docker/cli/command/node"
 	"github.com/docker/docker/cli/command/plugin"
@@ -33,6 +34,9 @@ func AddCommands(cmd *cobra.Command, dockerCli *command.DockerCli) {
 		// image
 		image.NewImageCommand(dockerCli),
 		image.NewBuildCommand(dockerCli),
+
+		// manfiest
+		manifest.NewManifestCommand(dockerCli),
 
 		// node
 		node.NewNodeCommand(dockerCli),
