@@ -87,7 +87,7 @@ func storeManifest(imgInspect *[]ImgManifestInspect, overwrite bool) error {
 
 	// @TODO: Will this always exist?
 	newDir = fmt.Sprintf("%s/.docker/manifests/", curUser.HomeDir)
-	os.Mkdir(newDir, 0755)
+	os.MkdirAll(newDir, 0755)
 	for i, mf := range *imgInspect {
 		fd, err = getManifestFd(mf.Digest)
 		defer fd.Close()
