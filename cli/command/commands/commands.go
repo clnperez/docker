@@ -35,14 +35,14 @@ func AddCommands(cmd *cobra.Command, dockerCli *command.DockerCli) {
 		image.NewImageCommand(dockerCli),
 		image.NewBuildCommand(dockerCli),
 
+		// manfiest
+		manifest.NewManifestCommand(dockerCli),
+
 		// network
 		network.NewNetworkCommand(dockerCli),
 
 		// node
 		node.NewNodeCommand(dockerCli),
-
-		// manifest
-		manifest.NewManifestCommand(dockerCli),
 
 		// plugin
 		plugin.NewPluginCommand(dockerCli),
