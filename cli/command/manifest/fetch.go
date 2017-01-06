@@ -99,7 +99,7 @@ func storeManifest(imgInspect *[]ImgManifestInspect, overwrite bool) error {
 			logrus.Debug("Not overwriting existing manifest file")
 			localMfstInspect, err := unmarshalIntoManifestInspect(fd)
 			if err != nil {
-				fmt.Printf("Store: Marshal error for %s: %e\n", mf.Tag, err)
+				fmt.Printf("Store: Marshal error for %s: %s\n", mf.Tag, err)
 				return err
 			}
 			(*imgInspect)[i] = localMfstInspect
