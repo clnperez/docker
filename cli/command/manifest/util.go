@@ -89,7 +89,7 @@ func mfToFilename(digest string) (string, error) {
 	)
 
 	if curUser, err = user.Current(); err != nil {
-		fmt.Errorf("Error retreiving user: %s", err)
+		fmt.Printf("Error retreiving user: %s", err)
 		return "", err
 	}
 	dir := fmt.Sprintf("%s/.docker/manifests/", curUser.HomeDir)
