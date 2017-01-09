@@ -62,20 +62,20 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 		if err != nil {
 			logrus.Fatal(err)
 		}
-		fmt.Println(string(prettyJSON.String()))
+		fmt.Fprintf(dockerCli.Out(), string(prettyJSON.String()))
 		return nil
 	}
 
 	// output basic informative details about the image
 	if len(imgInspect) == 1 {
 		// this is a basic single manifest
-		fmt.Printf("%s: manifest type: %s\n", name, imgInspect[0].MediaType)
-		fmt.Printf("      Digest: %s\n", imgInspect[0].Digest)
-		fmt.Printf("Architecture: %s\n", imgInspect[0].Architecture)
-		fmt.Printf("          OS: %s\n", imgInspect[0].Os)
-		fmt.Printf("    # Layers: %d\n", len(imgInspect[0].Layers))
+		fmt.Fprintf(dockerCli.Out(), "%s: manifest type: %s\n", name, imgInspect[0].MediaType)
+		fmt.Fprintf(dockerCli.Out(), "      Digest: %s\n", imgInspect[0].Digest)
+		fmt.Fprintf(dockerCli.Out(), "Architecture: %s\n", imgInspect[0].Architecture)
+		fmt.Fprintf(dockerCli.Out(), "          OS: %s\n", imgInspect[0].Os)
+		fmt.Fprintf(dockerCli.Out(), "    # Layers: %d\n", len(imgInspect[0].Layers))
 		for i, digest := range imgInspect[0].Layers {
-			fmt.Printf("      layer %d: digest = %s\n", i+1, digest)
+			fmt.Fprintf(dockerCli.Out(), "      layer %d: digest = %s\n", i+1, digest)
 		}
 		return nil
 	}
@@ -86,23 +86,23 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 		// @TODO: These tags are wonky. e.g.: "Repo Tags: 0ppc64le_hello-world,1library_hello-world"
 		// There may be any number of repo tags here, so fix this or get an out of bounds error:
 		//fmt.Printf("%d    Repo Tags: %s,%s\n", i+1, img.RepoTags[0], img.RepoTags[1])
-		fmt.Printf("%d  Tag: %s\n", i+1, img.Tag)
-		fmt.Printf("%d    Mfst Type: %s\n", i+1, img.MediaType)
-		fmt.Printf("%d       Digest: %s\n", i+1, img.Digest)
-		fmt.Printf("%d  Mfst Length: %d\n", i+1, img.Size)
-		fmt.Printf("%d     Platform:\n", i+1)
-		fmt.Printf("%d           -      OS: %s\n", i+1, img.Platform.OS)
+		fmt.Fprintf(dockerCli.Out(), "%d  Tag: %s\n", i+1, img.Tag)
+		fmt.Fprintf(dockerCli.Out(), "%d    Mfst Type: %s\n", i+1, img.MediaType)
+		fmt.Fprintf(dockerCli.Out(), "%d       Digest: %s\n", i+1, img.Digest)
+		fmt.Fprintf(dockerCli.Out(), "%d  Mfst Length: %d\n", i+1, img.Size)
+		fmt.Fprintf(dockerCli.Out(), "%d     Platform:\n", i+1)
+		fmt.Fprintf(dockerCli.Out(), "%d           -      OS: %s\n", i+1, img.Platform.OS)
 		// WINDOWS SUPPORT - NOT VENDORED YET fmt.Printf("%d           - OS Vers: %s\n", i+1, img.Platform.OSVersion)
 		// WINDOWS SUPPORT - NOT VENDORED YET fmt.Printf("%d           - OS Feat: %s\n", i+1, img.Platform.OSFeatures)
-		fmt.Printf("%d           -    Arch: %s\n", i+1, img.Platform.Architecture)
-		fmt.Printf("%d           - Variant: %s\n", i+1, img.Platform.Variant)
-		fmt.Printf("%d           - CPU Features: %s\n", i+1, strings.Join(img.Platform.Features, ","))
-		fmt.Printf("%d           - OS Features: %s\n", i+1, strings.Join(img.Platform.OSFeatures, ","))
-		fmt.Printf("%d     # Layers: %d\n", i+1, len(img.Layers))
+		fmt.Fprintf(dockerCli.Out(), "%d           -    Arch: %s\n", i+1, img.Platform.Architecture)
+		fmt.Fprintf(dockerCli.Out(), "%d           - Variant: %s\n", i+1, img.Platform.Variant)
+		fmt.Fprintf(dockerCli.Out(), "%d           - CPU Features: %s\n", i+1, strings.Join(img.Platform.Features, ","))
+		fmt.Fprintf(dockerCli.Out(), "%d           - OS Features: %s\n", i+1, strings.Join(img.Platform.OSFeatures, ","))
+		fmt.Fprintf(dockerCli.Out(), "%d     # Layers: %d\n", i+1, len(img.Layers))
 		for j, digest := range img.Layers {
-			fmt.Printf("         layer %d: digest = %s\n", j+1, digest)
+			fmt.Fprintf(dockerCli.Out(), "         layer %d: digest = %s\n", j+1, digest)
 		}
-		fmt.Println()
+		fmt.Fprintf(dockerCli.Out(), "\n")
 	}
 	return nil
 }
