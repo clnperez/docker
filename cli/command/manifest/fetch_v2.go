@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"runtime"
 
+	digest "github.com/opencontainers/go-digest"
+
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/distribution"
-	"github.com/docker/distribution/digest"
 	"github.com/docker/distribution/manifest/manifestlist"
 	"github.com/docker/distribution/manifest/schema1"
 	"github.com/docker/distribution/manifest/schema2"
@@ -222,7 +223,7 @@ func verifySchema1Manifest(signedManifest *schema1.SignedManifest, ref reference
 	// important to do this first, before any other content validation. If the
 	// digest cannot be verified, don't even bother with those other things.
 	if digested, isCanonical := ref.(reference.Canonical); isCanonical {
-		verifier, err := digest.NewDigestVerifier(digested.Digest())
+		verifier := digested.Digest().Verifier()
 		if err != nil {
 			return nil, err
 		}
@@ -369,7 +370,7 @@ func (mf *v2ManifestFetcher) pullSchema2ImageConfig(ctx context.Context, dgst di
 	}
 
 	// Verify image config digest
-	verifier, err := digest.NewDigestVerifier(dgst)
+	verifier := dgst.Verifier()
 	if err != nil {
 		return nil, err
 	}
@@ -441,7 +442,7 @@ func schema2ManifestDigest(ref reference.Named, mfst distribution.Manifest) (dig
 
 	// If pull by digest, then verify the manifest digest.
 	if digested, isDigested := ref.(reference.Canonical); isDigested {
-		verifier, err := digest.NewDigestVerifier(digested.Digest())
+		verifier := digested.Digest().Verifier()
 		if err != nil {
 			return "", err
 		}

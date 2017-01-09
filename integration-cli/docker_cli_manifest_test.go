@@ -3,7 +3,8 @@ package main
 import (
 	//"fmt"
 
-	"github.com/docker/docker/pkg/integration/checker"
+	"github.com/docker/docker/integration-cli/checker"
+	"github.com/docker/docker/integration-cli/registry"
 	"github.com/go-check/check"
 )
 
@@ -26,7 +27,7 @@ func init() {
 }
 
 //TODO: see what docker already does
-// regarding testingreg v1
+// regarding testing reg v1
 type testRegistryV1 struct {
 	//	cmd *exec.Cmd
 	url string
@@ -36,10 +37,10 @@ type testRegistryV1 struct {
 type DockerManifestSuite struct {
 	ds            *DockerSuite
 	regV1         *testRegistryV1
-	regV2         *testRegistryV2
-	regV2Schema1  *testRegistryV2
+	regV2         *registry.V2
+	regV2Schema1  *registry.V2
 	regV1WithAuth *testRegistryV1
-	regV2WithAuth *testRegistryV2
+	regV2WithAuth *registry.V2
 }
 
 func (s *DockerManifestSuite) SetUpSuite(c *check.C) {
