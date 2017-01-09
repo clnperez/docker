@@ -13,7 +13,8 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 
-	"github.com/docker/distribution/digest"
+	digest "github.com/opencontainers/go-digest"
+
 	"github.com/docker/distribution/manifest/manifestlist"
 	"github.com/docker/distribution/registry/api/v2"
 	"github.com/docker/distribution/registry/client/auth"
@@ -144,7 +145,7 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 		manifest := manifestlist.ManifestDescriptor{
 			Platform: mfstInspect.Platform,
 		}
-		manifest.Descriptor.Digest, err = digest.ParseDigest(mfstInspect.Digest)
+		manifest.Descriptor.Digest, err = digest.Parse(mfstInspect.Digest)
 		manifest.Size = mfstInspect.Size
 		manifest.MediaType = mfstInspect.MediaType
 
@@ -229,7 +230,7 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 
 	if statusSuccess(resp.StatusCode) {
 		dgstHeader := resp.Header.Get("Docker-Content-Digest")
-		dgst, err := digest.ParseDigest(dgstHeader)
+		dgst, err := digest.Parse(dgstHeader)
 		if err != nil {
 			return err
 		}
@@ -362,7 +363,7 @@ func pushReferences(httpClient *http.Client, urlBuilder *v2.URLBuilder, ref refe
 			return fmt.Errorf("Referenced manifest push unsuccessful: response %d: %s", resp.StatusCode, resp.Status)
 		}
 		dgstHeader := resp.Header.Get("Docker-Content-Digest")
-		dgst, err := digest.ParseDigest(dgstHeader)
+		dgst, err := digest.Parse(dgstHeader)
 		if err != nil {
 			return fmt.Errorf("Couldn't parse pushed manifest digest response: %v", err)
 		}
