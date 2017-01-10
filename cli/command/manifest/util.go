@@ -8,9 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/user"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/pkg/homedir"
 	"github.com/opencontainers/go-digest"
 )
 
@@ -82,19 +82,21 @@ func getManifestFd(digest digest.Digest) (*os.File, error) {
 }
 
 func mfToFilename(digest digest.Digest) (string, error) {
-
-	var (
-		curUser *user.User
-		err     error
-	)
-
-	if curUser, err = user.Current(); err != nil {
-		fmt.Printf("Error retreiving user: %s", err)
+	// Store the manifests in a user's home to prevent conflict. The HOME dir needs to be set,
+	// but can only be forcibly set on Linux at this time.
+	// See https://github.com/docker/docker/pull/29478 for more background on why this approach
+	// is being used.
+	if err := ensureHomeIfIAmStatic(); err != nil {
 		return "", err
 	}
-	dir := fmt.Sprintf("%s/.docker/manifests/", curUser.HomeDir)
+	userHome, err := homedir.GetStatic()
+	if err != nil {
+		return "", err
+	}
+	dir := fmt.Sprintf("%s/.docker/manifests/", userHome)
 	// Use the digest as the filename.
 	return fmt.Sprintf("%s%s", dir, digest.Hex()), nil
+
 }
 
 func unmarshalIntoManifestInspect(fd *os.File) (ImgManifestInspect, error) {
