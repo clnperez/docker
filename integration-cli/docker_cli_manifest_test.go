@@ -52,6 +52,7 @@ func (s *DockerManifestSuite) TearDownSuite(c *check.C) {
 }
 
 func (s *DockerManifestSuite) SetUpTest(c *check.C) {
+	testRequires(c, registry.Hosting)
 
 	s.regV1 = setupRegistryV1At(c, false, privateRegistryURLV1)
 	s.regV2 = setupRegistry(c, false, "", privateRegistryURLV2)
@@ -79,7 +80,8 @@ func (s *DockerManifestSuite) TearDownTest(c *check.C) {
 }
 
 func (s *DockerManifestSuite) TestManifestFetchWithoutList(c *check.C) {
-	testRequires(c, DaemonIsLinux)
+	testRequires(c, registry.Hosting)
+
 	_, errCode := dockerCmd(c, "manifest", "fetch", "busybox:latest")
 
 	c.Assert(errCode, checker.Equals, 0)
@@ -88,18 +90,19 @@ func (s *DockerManifestSuite) TestManifestFetchWithoutList(c *check.C) {
 
 // tests a manifest inspect
 func (s *DockerManifestSuite) TestManifestInspect(c *check.C) {
-	testRequires(c, DaemonIsLinux)
+	testRequires(c, registry.Hosting)
 	image := "busybox:latest"
 
 	out, rc, _ := dockerCmdWithError("manifest", "inspect", image)
 	c.Assert(rc, checker.Equals, 0)
-	// @TODO: Put better inpsect verification in when there's better output.
+	// @TODO: Put better inspect verification in when there's better output.
 	c.Assert(out, checker.Contains, "sha256")
 }
 
 // tests a manifest fetch on an unknown image
-func (s *DockerManifestSuite) TestManifestFetchOnUnkownImage(c *check.C) {
-	testRequires(c, DaemonIsLinux)
+func (s *DockerManifestSuite) TestManifestFetchOnUnknownImage(c *check.C) {
+	testRequires(c, registry.Hosting)
+
 	unknownImage := "busybox:thisdoesntexist"
 
 	// going to have to test with error here
@@ -109,7 +112,7 @@ func (s *DockerManifestSuite) TestManifestFetchOnUnkownImage(c *check.C) {
 }
 
 func (s *DockerManifestSuite) TestManifestAnnotate(c *check.C) {
-	testRequires(c, DaemonIsLinux)
+	testRequires(c, registry.Hosting)
 	// Since annotate changes a local manifest, no need for a registry
 	_, rc := dockerCmd(c, "manifest", "annotate", "busybox", "--arch", "amd64", "--os", "linux", "--cpuFeatures", "sse")
 	c.Assert(rc, checker.Equals, 0)
