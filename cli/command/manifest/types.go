@@ -1,6 +1,8 @@
 package manifest
 
 import (
+	"github.com/opencontainers/go-digest"
+
 	"github.com/docker/distribution/manifest/manifestlist"
 	containerTypes "github.com/docker/docker/api/types/container"
 )
@@ -27,7 +29,7 @@ type ImgManifestInspect struct {
 	Size            int64                  `json:"size"`
 	MediaType       string                 `json:"media_type"`
 	Tag             string                 `json:"tag"`
-	Digest          string                 `json:"digest"`
+	Digest          digest.Digest          `json:"digest"`
 	RepoTags        []string               `json:"repotags"`
 	Comment         string                 `json:"comment"`
 	Created         string                 `json:"created"`
