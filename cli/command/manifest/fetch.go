@@ -3,8 +3,6 @@ package manifest
 import (
 	"fmt"
 	"os"
-	"os/user"
-	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -21,6 +19,7 @@ import (
 	"github.com/docker/docker/distribution"
 	"github.com/docker/docker/dockerversion"
 	"github.com/docker/docker/image"
+	"github.com/docker/docker/pkg/homedir"
 	"github.com/docker/docker/reference"
 	"github.com/docker/docker/registry"
 	"github.com/spf13/cobra"
@@ -68,26 +67,19 @@ func storeManifest(imgInspect *[]ImgManifestInspect, overwrite bool) error {
 	// Store this image so that it can be annotated.
 
 	var (
-		curUser *user.User
-		err     error
-		newDir  string
-		fd      *os.File
+		err error
+		fd  *os.File
 	)
 
-	// This seems overkill, but for now, to avoid a panic on a staticly-linked binary, lock this goroutine to its current thread.
-	// See https://github.com/golang/go/issues/13470#issuecomment-162622286
-	// estesp worked around this for userns uid lookups but that is if you have an id already:
-	// https://github.com/docker/docker/issues/20191#issuecomment-255209782
-	// But we might not even store these this way, so, figure it out in design review.
-	runtime.LockOSThread()
-	if curUser, err = user.Current(); err != nil {
-		fmt.Printf("Error retreiving user: %s", err)
+	// Store the manifests in a user's home to prevent conflict. The HOME dir needs to be set,
+	// but can only be forcibly set on Linux at this time.
+	// See https://github.com/docker/docker/pull/29478 for more background on why this approach
+	// is being used.
+	if err := ensureHomeIfIAmStatic(); err != nil {
 		return err
 	}
-	runtime.UnlockOSThread()
-
-	// @TODO: Will this always exist?
-	newDir = fmt.Sprintf("%s/.docker/manifests/", curUser.HomeDir)
+	userHome, err := homedir.GetStatic()
+	newDir := fmt.Sprintf("%s/.docker/manifests/", userHome)
 	os.MkdirAll(newDir, 0755)
 	for i, mf := range *imgInspect {
 		fd, err = getManifestFd(mf.Digest)
