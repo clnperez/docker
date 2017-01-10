@@ -145,10 +145,11 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 		manifest := manifestlist.ManifestDescriptor{
 			Platform: mfstInspect.Platform,
 		}
-		manifest.Descriptor.Digest, err = digest.Parse(mfstInspect.Digest)
+		manifest.Descriptor.Digest = mfstInspect.Digest
 		manifest.Size = mfstInspect.Size
 		manifest.MediaType = mfstInspect.MediaType
 
+		err = manifest.Descriptor.Digest.Validate()
 		if err != nil {
 			return fmt.Errorf("Digest parse of image %q failed with error: %v", manifestRef, err)
 		}
@@ -166,7 +167,7 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 			logrus.Debugf("Adding manifest %q -> to be pushed to %q as a manifest reference", repoInfo.RemoteName(), repoName)
 			manifestRequests = append(manifestRequests, manifestPush{
 				Name:      repoInfo.RemoteName(),
-				Digest:    mfstInspect.Digest,
+				Digest:    mfstInspect.Digest.String(),
 				JSONBytes: mfstInspect.CanonicalJSON,
 				MediaType: mfstInspect.MediaType,
 			})

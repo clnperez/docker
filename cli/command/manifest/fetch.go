@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/opencontainers/go-digest"
 	"golang.org/x/net/context"
 
 	"github.com/docker/distribution/registry/api/errcode"
@@ -255,9 +256,9 @@ func newManifestFetcher(endpoint registry.APIEndpoint, repoInfo *registry.Reposi
 }
 
 func makeImgManifestInspect(img *image.Image, tag string, mfInfo manifestInfo, mediaType string, tagList []string) *ImgManifestInspect {
-	var digest string
+	var digest digest.Digest
 	if err := mfInfo.digest.Validate(); err == nil {
-		digest = mfInfo.digest.String()
+		digest = mfInfo.digest
 	}
 	var digests []string
 	for _, blobDigest := range mfInfo.blobDigests {

@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"os"
 	"os/user"
-	"strings"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/opencontainers/go-digest"
 )
 
 type osArch struct {
@@ -57,7 +57,7 @@ func isValidOSArch(os string, arch string) bool {
 	return ok
 }
 
-func getManifestFd(digest string) (*os.File, error) {
+func getManifestFd(digest digest.Digest) (*os.File, error) {
 
 	newFile, err := mfToFilename(digest)
 	if err != nil {
@@ -81,7 +81,7 @@ func getManifestFd(digest string) (*os.File, error) {
 	return fd, nil
 }
 
-func mfToFilename(digest string) (string, error) {
+func mfToFilename(digest digest.Digest) (string, error) {
 
 	var (
 		curUser *user.User
@@ -93,8 +93,8 @@ func mfToFilename(digest string) (string, error) {
 		return "", err
 	}
 	dir := fmt.Sprintf("%s/.docker/manifests/", curUser.HomeDir)
-	// Use the digest as the filename. First strip the prefix.
-	return fmt.Sprintf("%s%s", dir, strings.Split(digest, ":")[1]), nil
+	// Use the digest as the filename.
+	return fmt.Sprintf("%s%s", dir, digest.Hex()), nil
 }
 
 func unmarshalIntoManifestInspect(fd *os.File) (ImgManifestInspect, error) {
