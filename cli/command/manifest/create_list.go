@@ -2,10 +2,13 @@ package manifest
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -23,7 +26,9 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/cli"
 	"github.com/docker/docker/cli/command"
+	"github.com/docker/docker/cli/config/configfile"
 	"github.com/docker/docker/dockerversion"
+	"github.com/docker/docker/pkg/homedir"
 	"github.com/docker/docker/reference"
 	"github.com/docker/docker/registry"
 )
@@ -205,8 +210,6 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 	}
 	putRequest.Header.Set("Content-Type", mediaType)
 
-	// @TODO: Support http if using insecure registry.
-	// What builds the targetEndpoint? It has a tls.Config object that might need changing.
 	httpClient, err := getHTTPClient(ctx, dockerCli, targetRepo, targetEndpoint, repoName)
 	if err != nil {
 		return fmt.Errorf("Failed to setup HTTP client to repository: %v", err)
@@ -254,7 +257,7 @@ func getHTTPClient(ctx context.Context, dockerCli *command.DockerCli, repoInfo *
 			DualStack: true,
 		}).Dial,
 		TLSHandshakeTimeout: 10 * time.Second,
-		TLSClientConfig:     endpoint.TLSConfig, //@TODO: Change this if ping fails and in insecure registries list? crypto/tls: tls.Config
+		TLSClientConfig:     endpoint.TLSConfig,
 		DisableKeepAlives:   true,
 	}
 
@@ -262,7 +265,6 @@ func getHTTPClient(ctx context.Context, dockerCli *command.DockerCli, repoInfo *
 	modifiers := registry.DockerHeaders(dockerversion.DockerUserAgent(nil), http.Header{})
 	authTransport := transport.NewTransport(base, modifiers...)
 	challengeManager, _, err := registry.PingV2Registry(endpoint.URL, authTransport)
-	// @TODO: Here's where it fails if plain http with "Ping of V2 registry failed: Get https://127.0.0.1:5001/v2/: http: server gave HTTP response to HTTPS client"
 	if err != nil {
 		return nil, fmt.Errorf("Ping of V2 registry failed: %v", err)
 	}
@@ -333,7 +335,6 @@ func setupRepo(repoInfo *registry.RepositoryInfo) (registry.APIEndpoint, string,
 func selectPushEndpoint(repoInfo *registry.RepositoryInfo) (registry.APIEndpoint, error) {
 	options := registry.ServiceOptions{}
 	// By default (unless deprecated), loopback (IPv4 at least...) is automatically added as an insecure registry.
-	// @TODO: Load (from a config file in $HOME/.docker/config.json) any additional insecure registries here.
 	options.InsecureRegistries = loadLocalInsecureRegistries()
 	registryService := registry.NewService(options)
 	endpoints, err := registryService.LookupPushEndpoints(repoInfo.Hostname())
@@ -356,6 +357,33 @@ func selectPushEndpoint(repoInfo *registry.RepositoryInfo) (registry.APIEndpoint
 func loadLocalInsecureRegistries() []string {
 	// Store in $HOME/.docker/config.json. There may be mismatches between what the user has in their
 	// local config and what the daemon they're talking to allows, but we can be okay with that.
+	userHome, err := homedir.GetStatic()
+	if err != nil {
+		logrus.Debugf("Manifest create: Unable to retreive $HOME")
+		return []string{}
+	}
+
+	jsonData, err := ioutil.ReadFile(fmt.Sprintf("%s/.docker/config.json", userHome))
+	if err != nil && !os.IsNotExist(err) {
+		logrus.Debugf("Manifest create: Unable to read $HOME/.docker/config.json: %s", err)
+		return []string{}
+	}
+
+	if jsonData != nil {
+		cf := configfile.ConfigFile{}
+		if err := json.Unmarshal(jsonData, &cf); err != nil {
+			logrus.Debugf("Manifest create: Unable to unmarshal insecure registries from $HOME/.docker/config.json: %s", err)
+			return []string{}
+		}
+		insecureRegistries := cf.InsecureRegistries
+		if insecureRegistries != nil {
+			// @TODO: Add some hostname/ip validation somewhere
+			// @TODO: Add a test for a) specifying in config.json, b) invalid entries
+			return insecureRegistries
+		}
+	}
+
+	logrus.Debugf("Manifest create: Unable to load insecure registries from $HOME/.docker/config.json")
 	return []string{}
 }
 
