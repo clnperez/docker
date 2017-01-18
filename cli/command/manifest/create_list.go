@@ -179,6 +179,7 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 	manifestList.Versioned = manifestlist.SchemaVersion
 
 	urlBuilder, err := v2.NewURLBuilderFromString(targetEndpoint.URL.String(), false)
+	logrus.Infof("manifest: put: target endpoint url: %s", targetEndpoint.URL.String())
 	if err != nil {
 		return fmt.Errorf("Can't create URL builder from endpoint (%s): %v", targetEndpoint.URL.String(), err)
 	}
@@ -205,6 +206,7 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 	putRequest.Header.Set("Content-Type", mediaType)
 
 	// @TODO: Support http if using insecure registry.
+	// What builds the targetEndpoint? It has a tls.Config object that might need changing.
 	httpClient, err := getHTTPClient(ctx, dockerCli, targetRepo, targetEndpoint, repoName)
 	if err != nil {
 		return fmt.Errorf("Failed to setup HTTP client to repository: %v", err)
@@ -252,7 +254,7 @@ func getHTTPClient(ctx context.Context, dockerCli *command.DockerCli, repoInfo *
 			DualStack: true,
 		}).Dial,
 		TLSHandshakeTimeout: 10 * time.Second,
-		TLSClientConfig:     endpoint.TLSConfig,
+		TLSClientConfig:     endpoint.TLSConfig, //@TODO: Change this if ping fails and in insecure registries list? crypto/tls: tls.Config
 		DisableKeepAlives:   true,
 	}
 
@@ -260,6 +262,7 @@ func getHTTPClient(ctx context.Context, dockerCli *command.DockerCli, repoInfo *
 	modifiers := registry.DockerHeaders(dockerversion.DockerUserAgent(nil), http.Header{})
 	authTransport := transport.NewTransport(base, modifiers...)
 	challengeManager, _, err := registry.PingV2Registry(endpoint.URL, authTransport)
+	// @TODO: Here's where it fails if plain http with "Ping of V2 registry failed: Get https://127.0.0.1:5001/v2/: http: server gave HTTP response to HTTPS client"
 	if err != nil {
 		return nil, fmt.Errorf("Ping of V2 registry failed: %v", err)
 	}
@@ -291,7 +294,7 @@ func createManifestURLFromRef(targetRef reference.Named, urlBuilder *v2.URLBuild
 		return "", fmt.Errorf("Can't parse target image repository name from reference: %v", err)
 	}
 
-	// Set the tag to latest, if no tag found in YAML
+	// Set the tag to latest, if no tag found
 	if _, isTagged := targetRef.(reference.NamedTagged); !isTagged {
 		targetRef, err = reference.WithTag(targetRef, reference.DefaultTag)
 		if err != nil {
@@ -313,19 +316,11 @@ func createManifestURLFromRef(targetRef reference.Named, urlBuilder *v2.URLBuild
 }
 
 func setupRepo(repoInfo *registry.RepositoryInfo) (registry.APIEndpoint, string, error) {
-
-	options := registry.ServiceOptions{}
-	options.InsecureRegistries = append(options.InsecureRegistries, "0.0.0.0/0")
-	registryService := registry.NewService(options)
-
-	endpoints, err := registryService.LookupPushEndpoints(repoInfo.Hostname())
+	endpoint, err := selectPushEndpoint(repoInfo)
 	if err != nil {
-		return registry.APIEndpoint{}, "", err
+		return endpoint, "", err
 	}
-	logrus.Debugf("endpoints: %v", endpoints)
-	// take highest priority endpoint
-	endpoint := endpoints[0]
-
+	logrus.Debugf("manifest: create: endpoint: %v", endpoint)
 	repoName := repoInfo.FullName()
 	// If endpoint does not support CanonicalName, use the RemoteName instead
 	if endpoint.TrimHostname {
@@ -333,6 +328,35 @@ func setupRepo(repoInfo *registry.RepositoryInfo) (registry.APIEndpoint, string,
 		logrus.Debugf("repoName: %v", repoName)
 	}
 	return endpoint, repoName, nil
+}
+
+func selectPushEndpoint(repoInfo *registry.RepositoryInfo) (registry.APIEndpoint, error) {
+	options := registry.ServiceOptions{}
+	// By default (unless deprecated), loopback (IPv4 at least...) is automatically added as an insecure registry.
+	// @TODO: Load (from a config file in $HOME/.docker/config.json) any additional insecure registries here.
+	options.InsecureRegistries = loadLocalInsecureRegistries()
+	registryService := registry.NewService(options)
+	endpoints, err := registryService.LookupPushEndpoints(repoInfo.Hostname())
+	if err != nil {
+		return registry.APIEndpoint{}, err
+	}
+	logrus.Debugf("manifest: potential push endpoints: %v\n", endpoints)
+	// Default to the highest priority endpoint to return
+	endpoint := endpoints[0]
+	if !repoInfo.Index.Secure {
+		for _, ep := range endpoints {
+			if ep.URL.Scheme == "http" {
+				endpoint = ep
+			}
+		}
+	}
+	return endpoint, nil
+}
+
+func loadLocalInsecureRegistries() []string {
+	// Store in $HOME/.docker/config.json. There may be mismatches between what the user has in their
+	// local config and what the daemon they're talking to allows, but we can be okay with that.
+	return []string{}
 }
 
 func pushReferences(httpClient *http.Client, urlBuilder *v2.URLBuilder, ref reference.Named, manifests []manifestPush) error {
