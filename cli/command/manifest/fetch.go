@@ -128,7 +128,9 @@ func getImageData(dockerCli *command.DockerCli, name string, overwrite bool) ([]
 	authConfig := command.ResolveAuthConfig(ctx, dockerCli, repoInfo.Index)
 
 	options := registry.ServiceOptions{}
-	options.InsecureRegistries = append(options.InsecureRegistries, "0.0.0.0/0")
+	// @TODO: Get configured insecure registries from the daemon here?
+	options.InsecureRegistries = append(options.InsecureRegistries, "127.0.0.1:5001")
+	//options.InsecureRegistries = append(options.InsecureRegistries, "0.0.0.0/0")
 	registryService := registry.NewService(options)
 
 	// a list of registry.APIEndpoint, which could be mirrors, etc., of locally-configured
