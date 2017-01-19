@@ -333,9 +333,14 @@ func setupRepo(repoInfo *registry.RepositoryInfo) (registry.APIEndpoint, string,
 }
 
 func selectPushEndpoint(repoInfo *registry.RepositoryInfo) (registry.APIEndpoint, error) {
+	var err error
+
 	options := registry.ServiceOptions{}
 	// By default (unless deprecated), loopback (IPv4 at least...) is automatically added as an insecure registry.
-	options.InsecureRegistries = loadLocalInsecureRegistries()
+	options.InsecureRegistries, err = loadLocalInsecureRegistries()
+	if err != nil {
+		return registry.APIEndpoint{}, err
+	}
 	registryService := registry.NewService(options)
 	endpoints, err := registryService.LookupPushEndpoints(repoInfo.Hostname())
 	if err != nil {
@@ -354,37 +359,50 @@ func selectPushEndpoint(repoInfo *registry.RepositoryInfo) (registry.APIEndpoint
 	return endpoint, nil
 }
 
-func loadLocalInsecureRegistries() []string {
-	// Store in $HOME/.docker/config.json. There may be mismatches between what the user has in their
+func loadLocalInsecureRegistries() ([]string, error) {
+	insecureRegistries := []string{}
+	// Check $HOME/.docker/config.json. There may be mismatches between what the user has in their
 	// local config and what the daemon they're talking to allows, but we can be okay with that.
 	userHome, err := homedir.GetStatic()
 	if err != nil {
-		logrus.Debugf("Manifest create: Unable to retreive $HOME")
-		return []string{}
+		return []string{}, fmt.Errorf("Manifest create: lookup local insecure registries: Unable to retreive $HOME")
 	}
 
 	jsonData, err := ioutil.ReadFile(fmt.Sprintf("%s/.docker/config.json", userHome))
-	if err != nil && !os.IsNotExist(err) {
-		logrus.Debugf("Manifest create: Unable to read $HOME/.docker/config.json: %s", err)
-		return []string{}
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return []string{}, fmt.Errorf("Manifest create: Unable to read $HOME/.docker/config.json: %s", err)
+		} else {
+			// If the file just doesn't exist, no insecure registries were specified.
+			logrus.Debug("Manifest: No insecure registries were specified via $HOME/.docker/config.json")
+			return []string{}, nil
+		}
 	}
 
 	if jsonData != nil {
 		cf := configfile.ConfigFile{}
 		if err := json.Unmarshal(jsonData, &cf); err != nil {
 			logrus.Debugf("Manifest create: Unable to unmarshal insecure registries from $HOME/.docker/config.json: %s", err)
-			return []string{}
+			return []string{}, nil
 		}
-		insecureRegistries := cf.InsecureRegistries
-		if insecureRegistries != nil {
-			// @TODO: Add some hostname/ip validation somewhere
-			// @TODO: Add a test for a) specifying in config.json, b) invalid entries
-			return insecureRegistries
+		if cf.InsecureRegistries == nil {
+			return []string{}, nil
+		}
+		// @TODO: Add tests for a) specifying in config.json, b) invalid entries
+		for _, reg := range cf.InsecureRegistries {
+			if err := net.ParseIP(reg); err == nil {
+				insecureRegistries = append(insecureRegistries, reg)
+			} else if _, _, err := net.ParseCIDR(reg); err == nil {
+				insecureRegistries = append(insecureRegistries, reg)
+			} else if ips, err := net.LookupHost(reg); err == nil {
+				insecureRegistries = append(insecureRegistries, ips...)
+			} else {
+				return []string{}, fmt.Errorf("Manifest create: Invalid registry (%s) specified in ~/.docker/config.json: %s", reg, err)
+			}
 		}
 	}
 
-	logrus.Debugf("Manifest create: Unable to load insecure registries from $HOME/.docker/config.json")
-	return []string{}
+	return insecureRegistries, nil
 }
 
 func pushReferences(httpClient *http.Client, urlBuilder *v2.URLBuilder, ref reference.Named, manifests []manifestPush) error {
