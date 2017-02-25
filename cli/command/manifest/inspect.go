@@ -35,7 +35,6 @@ func newInspectCommand(dockerCli *command.DockerCli) *cobra.Command {
 	flags := cmd.Flags()
 
 	flags.BoolVarP(&opts.raw, "raw", "r", false, "Provide raw JSON output")
-	command.AddTrustedFlags(flags, true)
 
 	return cmd
 }
@@ -48,7 +47,8 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 	)
 
 	name := opts.remote
-	imgInspect, _, err := getImageData(dockerCli, name, false)
+	// @TODO: Path or not?
+	imgInspect, _, err := getImageData(dockerCli, name, "")
 	if err != nil {
 		logrus.Fatal(err)
 	}
