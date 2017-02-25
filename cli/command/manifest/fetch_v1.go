@@ -10,6 +10,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/schema1"
+	"github.com/docker/distribution/reference"
 	"github.com/docker/distribution/registry/api/errcode"
 	"github.com/docker/distribution/registry/api/v2"
 	"github.com/docker/distribution/registry/client/transport"
@@ -18,7 +19,6 @@ import (
 	"github.com/docker/docker/dockerversion"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/image/v1"
-	"github.com/docker/docker/reference"
 	"github.com/docker/docker/registry"
 	"golang.org/x/net/context"
 )
@@ -36,6 +36,8 @@ type v1ManifestFetcher struct {
 }
 
 func (mf *v1ManifestFetcher) Fetch(ctx context.Context, ref reference.Named) ([]ImgManifestInspect, error) {
+	// @TODO: Re-test the v1 registry stuff after pulling in all the consolidated reference stuff.
+	// Pre-condition: ref has to be tagged (e.g. using ParseNormalizedNamed)
 	if _, isCanonical := ref.(reference.Canonical); isCanonical {
 		// Allowing fallback, because HTTPS v1 is before HTTP v2
 		return nil, fallbackError{
@@ -77,52 +79,49 @@ func (mf *v1ManifestFetcher) Fetch(ctx context.Context, ref reference.Named) ([]
 }
 
 func (mf *v1ManifestFetcher) fetchWithSession(ctx context.Context, ref reference.Named) ([]ImgManifestInspect, error) {
+	// Pre-Condition: ref should always be tagged (e.g. using ParseNormalizedNamed)
 	var (
 		imageList = []ImgManifestInspect{}
 		pulledImg *image.Image
+		tagsMap   map[string]string
 	)
-	repoData, err := mf.session.GetRepositoryData(mf.repoInfo)
+	repoData, err := mf.session.GetRepositoryData(mf.repoInfo.Name)
 	if err != nil {
 		if strings.Contains(err.Error(), "HTTP code: 404") {
-			return nil, fmt.Errorf("Error: image %s not found", mf.repoInfo.RemoteName())
+			return nil, fmt.Errorf("Error: image %s not found", reference.Path(mf.repoInfo.Name))
 		}
 		// Unexpected HTTP error
 		return nil, err
 	}
 
-	var tagsList map[string]string
-	tagsList, err = mf.session.GetRemoteTags(repoData.Endpoints, mf.repoInfo)
-	if err != nil {
-		logrus.Errorf("unable to get remote tags: %s", err)
-		return nil, err
-	}
-
+	// GetRemoteTags gets all tags & corresponding image IDs for a repo, returned in a map
 	logrus.Debugf("Retrieving the tag list")
-	tagged, isTagged := ref.(reference.NamedTagged)
-	var tagID, tag string
-	if isTagged {
-		tag = tagged.Tag()
-		tagsList[tagged.Tag()] = tagID
-	} else {
-		ref, err = reference.WithTag(ref, reference.DefaultTag)
-		if err != nil {
-			return nil, err
-		}
-		tagged, _ := ref.(reference.NamedTagged)
-		tag = tagged.Tag()
-		tagsList[tagged.Tag()] = tagID
-	}
-	tagID, err = mf.session.GetRemoteTag(repoData.Endpoints, mf.repoInfo, tag)
-	if err == registry.ErrRepoNotFound {
-		return nil, fmt.Errorf("Tag %s not found in repository %s", tag, mf.repoInfo.FullName())
-	}
+	tagsMap, err = mf.session.GetRemoteTags(repoData.Endpoints, mf.repoInfo.Name)
 	if err != nil {
 		logrus.Errorf("unable to get remote tags: %s", err)
 		return nil, err
 	}
 
+	tagged, isTagged := ref.(reference.NamedTagged)
+	if !isTagged {
+		logrus.Errorf("No tag in image name! Christy messed up.")
+		return nil, fmt.Errorf("fws: No tag in image name!")
+	}
+	// @TODO: Add a test for using tagged & untagged refs.
+	tag := tagged.Tag()
+	tagID, err := mf.session.GetRemoteTag(repoData.Endpoints, mf.repoInfo.Name, tag)
+	if err == registry.ErrRepoNotFound {
+		return nil, fmt.Errorf("Tag %s not found in repository %s", tag, mf.repoInfo.Name.Name())
+	}
+	if err != nil {
+		logrus.Errorf("unable to get remote tags: %s", err)
+		return nil, err
+	}
+	tagsMap[tagged.Tag()] = tagID
+
+	// Pull the tags from the tag/imgID map:
 	tagList := []string{}
-	for tag := range tagsList {
+	for tag := range tagsMap {
 		tagList = append(tagList, tag)
 	}
 
@@ -131,7 +130,7 @@ func (mf *v1ManifestFetcher) fetchWithSession(ctx context.Context, ref reference
 	for _, ep := range mf.repoInfo.Index.Mirrors {
 		if pulledImg, err = mf.pullImageJSON(img.ID, ep); err != nil {
 			// Don't report errors when pulling from mirrors.
-			logrus.Debugf("Error pulling image json of %s:%s, mirror: %s, %s", mf.repoInfo.FullName(), img.Tag, ep, err)
+			logrus.Debugf("Error pulling image json of %s:%s, mirror: %s, %s", mf.repoInfo.Name.Name(), img.Tag, ep, err)
 			continue
 		}
 		break
@@ -140,17 +139,17 @@ func (mf *v1ManifestFetcher) fetchWithSession(ctx context.Context, ref reference
 		for _, ep := range repoData.Endpoints {
 			if pulledImg, err = mf.pullImageJSON(img.ID, ep); err != nil {
 				// It's not ideal that only the last error is returned, it would be better to concatenate the errors.
-				logrus.Infof("Error pulling image json of %s:%s, endpoint: %s, %v", mf.repoInfo.FullName(), img.Tag, ep, err)
+				logrus.Infof("Error pulling image json of %s:%s, endpoint: %s, %v", mf.repoInfo.Name.Name(), img.Tag, ep, err)
 				continue
 			}
 			break
 		}
 	}
 	if err != nil {
-		return nil, fmt.Errorf("Error pulling image (%s) from %s, %v", img.Tag, mf.repoInfo.FullName(), err)
+		return nil, fmt.Errorf("Error pulling image (%s) from %s, %v", img.Tag, mf.repoInfo.Name.Name(), err)
 	}
 	if pulledImg == nil {
-		return nil, fmt.Errorf("No such image %s:%s", mf.repoInfo.FullName(), tag)
+		return nil, fmt.Errorf("No such image %s:%s", mf.repoInfo.Name.Name(), tag)
 	}
 
 	imageInsp := makeImgManifestInspect(pulledImg, tag, manifestInfo{}, schema1.MediaTypeManifest, tagList)

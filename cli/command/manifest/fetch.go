@@ -11,6 +11,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"golang.org/x/net/context"
 
+	"github.com/docker/distribution/reference"
 	"github.com/docker/distribution/registry/api/errcode"
 	"github.com/docker/distribution/registry/client"
 	"github.com/docker/docker/api/types"
@@ -20,7 +21,6 @@ import (
 	"github.com/docker/docker/dockerversion"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/pkg/homedir"
-	"github.com/docker/docker/reference"
 	"github.com/docker/docker/registry"
 	"github.com/spf13/cobra"
 	//	"github.com/spf13/pflag"
@@ -55,7 +55,7 @@ func newListFetchCommand(dockerCli *command.DockerCli) *cobra.Command {
 func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 	// Get the data and then format it
 	name := opts.remote
-	_, _, err := getImageData(dockerCli, name, true)
+	_, _, err := getImageData(dockerCli, name, "")
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -63,14 +63,17 @@ func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 	return nil
 }
 
-func storeManifest(imgInspect *[]ImgManifestInspect, overwrite bool) error {
+func storeManifest(imgInspect *[]ImgManifestInspect, forIndex string) error {
 	// Store this image so that it can be annotated.
 
 	var (
-		err error
-		fd  *os.File
+		err       error
+		fd        *os.File
+		newDir    string
+		overwrite bool
 	)
 
+	overwrite = forIndex == ""
 	// Store the manifests in a user's home to prevent conflict. The HOME dir needs to be set,
 	// but can only be forcibly set on Linux at this time.
 	// See https://github.com/docker/docker/pull/29478 for more background on why this approach
@@ -79,7 +82,11 @@ func storeManifest(imgInspect *[]ImgManifestInspect, overwrite bool) error {
 		return err
 	}
 	userHome, err := homedir.GetStatic()
-	newDir := fmt.Sprintf("%s/.docker/manifests/", userHome)
+	if forIndex == "" {
+		newDir = fmt.Sprintf("%s/.docker/manifests/", userHome)
+	} else {
+		newDir = fmt.Sprintf("%s/.docker/manifests/%s", userHome, forIndex)
+	}
 	os.MkdirAll(newDir, 0755)
 	for i, mf := range *imgInspect {
 		fd, err = getManifestFd(mf.Digest)
@@ -109,15 +116,24 @@ func storeManifest(imgInspect *[]ImgManifestInspect, overwrite bool) error {
 	return nil
 }
 
-func getImageData(dockerCli *command.DockerCli, name string, overwrite bool) ([]ImgManifestInspect, *registry.RepositoryInfo, error) {
-	// Pull from repo.
+func getImageData(dockerCli *command.DockerCli, name string, forIndex string) ([]ImgManifestInspect, *registry.RepositoryInfo, error) {
 
-	if _, _, err := reference.ParseIDOrReference(name); err != nil {
-		return nil, nil, fmt.Errorf("Error parsing reference: %s\n", err)
+	var (
+		namedRef reference.Named
+		err      error
+	)
+
+	if namedRef, err = reference.ParseNormalizedNamed(name); err != nil {
+		return nil, nil, fmt.Errorf("Error parsing reference for %s: %s\n", name, err)
+	}
+	logrus.Debugf("getting image data for ref: %v", namedRef)
+	// Make sure it has a tag, as long as it's not a digest
+	if _, isDigested := namedRef.(reference.Canonical); !isDigested {
+		namedRef = reference.TagNameOnly(namedRef)
 	}
 
-	namedRef, err := reference.ParseNamed(name)
 	// Resolve the Repository name from fqn to RepositoryInfo
+	// This calls TrimNamed, which removes the tag, so always use namedRef for the image.
 	repoInfo, err := registry.ParseRepositoryInfo(namedRef)
 	if err != nil {
 		return nil, nil, err
@@ -128,14 +144,11 @@ func getImageData(dockerCli *command.DockerCli, name string, overwrite bool) ([]
 	authConfig := command.ResolveAuthConfig(ctx, dockerCli, repoInfo.Index)
 
 	options := registry.ServiceOptions{}
-	// @TODO: Get configured insecure registries from the daemon here?
-	options.InsecureRegistries = append(options.InsecureRegistries, "127.0.0.1:5001")
-	//options.InsecureRegistries = append(options.InsecureRegistries, "0.0.0.0/0")
 	registryService := registry.NewService(options)
 
 	// a list of registry.APIEndpoint, which could be mirrors, etc., of locally-configured
 	// repo endpoints. The list will be ordered by priority (v2, https, v1).
-	endpoints, err := registryService.LookupPullEndpoints(repoInfo.Hostname())
+	endpoints, err := registryService.LookupPullEndpoints(reference.Domain(repoInfo.Name))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -175,7 +188,7 @@ func getImageData(dockerCli *command.DockerCli, name string, overwrite bool) ([]
 			}
 		}
 
-		logrus.Debugf("Trying to fetch image manifest of %s repository from %s %s", repoInfo.Name(), endpoint.URL, endpoint.Version)
+		logrus.Debugf("Trying to fetch image manifest of %s repository from %s %s", namedRef, endpoint.URL, endpoint.Version)
 
 		fetcher, err := newManifestFetcher(endpoint, repoInfo, authConfig, registryService)
 		if err != nil {
@@ -215,7 +228,7 @@ func getImageData(dockerCli *command.DockerCli, name string, overwrite bool) ([]
 			return nil, nil, err
 		}
 
-		if err := storeManifest(&foundImages, overwrite); err != nil {
+		if err := storeManifest(&foundImages, forIndex); err != nil {
 			logrus.Errorf("Error storing manifests: %s\n", err)
 		}
 		return foundImages, repoInfo, nil
