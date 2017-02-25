@@ -13,12 +13,12 @@ import (
 	"github.com/docker/distribution/manifest/manifestlist"
 	"github.com/docker/distribution/manifest/schema1"
 	"github.com/docker/distribution/manifest/schema2"
+	"github.com/docker/distribution/reference"
 	"github.com/docker/distribution/registry/api/errcode"
 	"github.com/docker/docker/api/types"
 	dockerdistribution "github.com/docker/docker/distribution"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/image/v1"
-	"github.com/docker/docker/reference"
 	"github.com/docker/docker/registry"
 	"golang.org/x/net/context"
 )
@@ -42,6 +42,7 @@ type manifestInfo struct {
 }
 
 func (mf *v2ManifestFetcher) Fetch(ctx context.Context, ref reference.Named) ([]ImgManifestInspect, error) {
+	// Pre-condition: ref has to be tagged (e.g. using ParseNormalizedNamed)
 	var err error
 
 	mf.repo, mf.confirmedV2, err = dockerdistribution.NewV2Repository(ctx, mf.repoInfo, mf.endpoint, nil, &mf.authConfig, "pull")
@@ -49,6 +50,8 @@ func (mf *v2ManifestFetcher) Fetch(ctx context.Context, ref reference.Named) ([]
 		logrus.Debugf("Error getting v2 registry: %v", err)
 		return nil, err
 	}
+
+	logrus.Debugf("v2 Fetch: fetching image for ref %v", ref)
 
 	images, err := mf.fetchWithRepository(ctx, ref)
 	if err != nil {
@@ -79,13 +82,6 @@ func (mf *v2ManifestFetcher) fetchWithRepository(ctx context.Context, ref refere
 		return nil, err
 	}
 
-	if _, isTagged := ref.(reference.NamedTagged); !isTagged {
-		ref, err = reference.WithTag(ref, reference.DefaultTag)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	if tagged, isTagged := ref.(reference.NamedTagged); isTagged {
 		// NOTE: not using TagService.Get, since it uses HEAD requests
 		// against the manifests endpoint, which are not supported by
@@ -104,6 +100,8 @@ func (mf *v2ManifestFetcher) fetchWithRepository(ctx context.Context, ref refere
 	} else {
 		return nil, fmt.Errorf("internal error: reference has neither a tag nor a digest: %s", ref.String())
 	}
+	// @TODO: I think I'm covering all my bases with tags, but what if the user just
+	// provided a digest?? Make sure that use case is valid/covered.
 
 	if manifest == nil {
 		return nil, fmt.Errorf("image manifest does not exist for tag or digest %q", tagOrDigest)

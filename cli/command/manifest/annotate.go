@@ -18,7 +18,7 @@ type annotateOptions struct {
 	osFeatures  []string
 }
 
-// NewAnnotateCommand creates a new `docker manifest inspect` command
+// NewAnnotateCommand creates a new `docker manifest annotate` command
 func newAnnotateCommand(dockerCli *command.DockerCli) *cobra.Command {
 	var opts annotateOptions
 
@@ -41,15 +41,13 @@ func newAnnotateCommand(dockerCli *command.DockerCli) *cobra.Command {
 	flags.StringSliceVar(&opts.osFeatures, "osFeatures", []string{}, "Add feature info to a manifest before pushing it.")
 	flags.StringVar(&opts.variant, "variant", "", "Add arch variant to a manifest before pushing it.")
 
-	command.AddTrustedFlags(flags, true)
-
 	return cmd
 }
 
 func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) error {
 
 	// Make sure the manifests are pulled, find the file you need, unmarshal the json, edit the file, and done.
-	imgInspect, _, err := getImageData(dockerCli, opts.remote, false)
+	imgInspect, _, err := getImageData(dockerCli, opts.remote, "")
 	if err != nil {
 		return err
 	}
