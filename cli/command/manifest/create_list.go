@@ -124,8 +124,8 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 		if opts.newRef != nil  {
 		}
 	*/
-	// @TODO: I think this will get all the defaults (hostname & tag) populated.
 	targetRef, err := reference.ParseNormalizedNamed(opts.newRef)
+
 	if err != nil {
 		return fmt.Errorf("Error parsing name for manifest list (%s): %v", opts.newRef, err)
 	}
@@ -182,7 +182,7 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 		// requested blob mounts (cross-repository push) before pushing the manifest list
 		manifestRepoName := reference.Path(repoInfo.Name)
 		if repoName != manifestRepoName {
-			logrus.Debugf("Adding layers of %q to blob mount requests", manifestRef)
+			logrus.Debugf("Adding layers of %q to blob mount requests to %s", manifestRef, manifestRepoName)
 			for _, layer := range mfstInspect.Layers {
 				blobMountRequests = append(blobMountRequests, blobMount{FromRepo: manifestRepoName, Digest: layer})
 			}
@@ -310,6 +310,7 @@ func getHTTPClient(ctx context.Context, dockerCli *command.DockerCli, repoInfo *
 }
 
 func createManifestURLFromRef(targetRef reference.Named, urlBuilder *v2.URLBuilder) (string, error) {
+
 	// @TODO: Change to this when distribution version bumped up:
 	// manifestURL, err := urlBuilder.BuildManifestURL(reference.EnsureTagged(targetRef))
 	manifestURL, err := urlBuilder.BuildManifestURL(reference.TagNameOnly(targetRef))
@@ -328,7 +329,7 @@ func setupRepo(repoInfo *registry.RepositoryInfo) (registry.APIEndpoint, string,
 	repoName := repoInfo.Name.Name()
 	// If endpoint does not support CanonicalName, use the RemoteName instead
 	if endpoint.TrimHostname {
-		repoName = reference.Domain(repoInfo.Name)
+		repoName = reference.Path(repoInfo.Name)
 		logrus.Debugf("repoName: %v", repoName)
 	}
 	return endpoint, repoName, nil
