@@ -276,7 +276,7 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 		if err != nil {
 			return err
 		}
-		logrus.Info("Succesfully pushed manifest list %s with digest %s", targetRef, dgst)
+		logrus.Infof("Succesfully pushed manifest list %s with digest %s", targetRef, dgst)
 		return nil
 	}
 	return fmt.Errorf("Registry push unsuccessful: response %d: %s", resp.StatusCode, resp.Status)
@@ -437,15 +437,18 @@ func loadLocalInsecureRegistries() ([]string, error) {
 }
 
 func pushReferences(httpClient *http.Client, urlBuilder *v2.URLBuilder, ref reference.Named, manifests []manifestPush) error {
-	pushTarget := ref.Name()
-	for i, manifest := range manifests {
+	//pushTarget := ref.Name()
+	for _, manifest := range manifests {
 		// create a dummy tag from the integer count and the original name (in the original repo)
 		// @TODO: Pull in Phil's change for this weird tagging thingy he did :D
-		targetRef, err := reference.ParseNamed(fmt.Sprintf("%s:%d%s", pushTarget, i, strings.Replace(manifest.Name, "/", "_", -1)))
-		if err != nil {
-			return fmt.Errorf("Error creating manifest name target for referenced manifest %q: %v", manifest.Name, err)
-		}
-		pushURL, err := createManifestURLFromRef(targetRef, urlBuilder)
+		/*
+			targetRef, err := reference.ParseNamed(fmt.Sprintf("%s:%d%s", pushTarget, i, strings.Replace(manifest.Name, "/", "_", -1)))
+			if err != nil {
+				return fmt.Errorf("Error creating manifest name target for referenced manifest %q: %v", manifest.Name, err)
+			}
+		*/
+		//pushURL, err := createManifestURLFromRef(targetRef, urlBuilder)
+		pushURL, err := createManifestURLFromRef(ref, urlBuilder)
 		if err != nil {
 			return fmt.Errorf("Error setting up manifest push URL for manifest references for %q: %v", manifest.Name, err)
 		}
