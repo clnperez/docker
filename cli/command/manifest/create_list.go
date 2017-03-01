@@ -128,7 +128,6 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 	if err != nil {
 		return fmt.Errorf("Error parsing name for manifest list (%s): %v", opts.newRef, err)
 	}
-	targetRef = reference.TagNameOnly(targetRef)
 	targetRepo, err := registry.ParseRepositoryInfo(targetRef)
 	if err != nil {
 		return fmt.Errorf("Error parsing repository name for manifest list (%s): %v", opts.newRef, err)
@@ -137,6 +136,22 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 	if err != nil {
 		return fmt.Errorf("Error setting up repository endpoint and references for %q: %v", targetRef, err)
 	}
+
+	// Now that targetRepo is set, jump through a lot of hoops to get a Named reference without
+	// the domain included:
+	tagIndex := strings.IndexRune(targetRef.String(), ':')
+	if tagIndex < 0 {
+		targetRef = reference.TagNameOnly(targetRef)
+		tagIndex = strings.IndexRune(targetRef.String(), ':')
+	}
+	tag := targetRef.String()[tagIndex+1:]
+	bareRef, err := reference.WithName(reference.Path(targetRef))
+	if err != nil {
+		return err
+	}
+	targetRef, _ = reference.WithTag(bareRef, tag)
+
+	logrus.Debugf("Creating target ref: %s", targetRef.String())
 
 	ctx := context.Background()
 
@@ -311,8 +326,21 @@ func getHTTPClient(ctx context.Context, dockerCli *command.DockerCli, repoInfo *
 
 func createManifestURLFromRef(targetRef reference.Named, urlBuilder *v2.URLBuilder) (string, error) {
 
-	// @TODO: How can I make this work without getting an extra 'docker.io' in the URL?
-	// This needs a tag or reference:
+	/*
+		// Jump through a lot of hoops to get a Named reference without the domain included:
+		tagIndex := strings.IndexRune(targetRef.String(), ':')
+		if tagIndex < 0 {
+			return "", fmt.Errorf("No tag. Bail")
+		}
+		tag := targetRef.String()[tagIndex+1:]
+		bareRef, err := reference.WithName(reference.Path(targetRef))
+		if err != nil {
+			return "", err
+		}
+		bareRef, _ = reference.WithTag(bareRef, tag)
+		logrus.Debugf("createManifestURLFromRef ref: %s", bareRef.String())
+		manifestURL, err := urlBuilder.BuildManifestURL(bareRef)
+	*/
 	manifestURL, err := urlBuilder.BuildManifestURL(targetRef)
 	if err != nil {
 		return "", fmt.Errorf("Failed to build manifest URL from target reference: %v", err)
