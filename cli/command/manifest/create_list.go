@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -138,13 +137,13 @@ func putManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []
 	}
 
 	// Now that targetRepo is set, jump through a lot of hoops to get a Named reference without
-	// the domain included:
-	tagIndex := strings.IndexRune(targetRef.String(), ':')
-	if tagIndex < 0 {
+	// the domain included, preserving an existing tag:
+	tagged, isTagged := targetRef.(reference.NamedTagged)
+	if !isTagged {
 		targetRef = reference.TagNameOnly(targetRef)
-		tagIndex = strings.IndexRune(targetRef.String(), ':')
+		tagged, _ = targetRef.(reference.NamedTagged)
 	}
-	tag := targetRef.String()[tagIndex+1:]
+	tag := tagged.Tag()
 	bareRef, err := reference.WithName(reference.Path(targetRef))
 	if err != nil {
 		return err
