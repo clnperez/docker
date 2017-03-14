@@ -10,8 +10,9 @@ import (
 )
 
 type annotateOptions struct {
-	remote      string
-	variant     string
+	target      string // the target manifest list name
+	image       string // the sub-manifest to annotate within the list
+	variant     string // an architecture variant
 	os          string
 	arch        string
 	cpuFeatures []string
@@ -27,7 +28,8 @@ func newAnnotateCommand(dockerCli *command.DockerCli) *cobra.Command {
 		Short: "Add additional information to an image's manifest.",
 		Args:  cli.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			opts.remote = args[0]
+			opts.target = args[0]
+			opts.image = args[1]
 			return runManifestAnnotate(dockerCli, opts)
 		},
 	}
@@ -47,7 +49,10 @@ func newAnnotateCommand(dockerCli *command.DockerCli) *cobra.Command {
 func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) error {
 
 	// Make sure the manifests are pulled, find the file you need, unmarshal the json, edit the file, and done.
-	imgInspect, _, err := getImageData(dockerCli, opts.remote, "")
+	// @TODO: Now that create is first (unless you're using a yaml file), this will always look for a locally-stored
+	// manifest under the "transaction" (folder) they specified on create. They should match (e.g. don't use docker.io/myrepo:latest,
+	// then later just myrepo.
+	imgInspect, _, err := getImageData(dockerCli, opts.image, opts.target)
 	if err != nil {
 		return err
 	}
@@ -58,7 +63,7 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 
 	mf := imgInspect[0]
 
-	fd, err := getManifestFd(mf.Digest)
+	fd, err := getManifestFd(mf.Digest, opts.target)
 	if err != nil {
 		return err
 	}
@@ -95,7 +100,7 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 		newMf.Platform.Variant = opts.variant
 	}
 
-	if err := updateMfFile(newMf); err != nil {
+	if err := updateMfFile(newMf, opts.target); err != nil {
 		return err
 	}
 
