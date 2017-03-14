@@ -57,9 +57,14 @@ func isValidOSArch(os string, arch string) bool {
 	return ok
 }
 
-func getManifestFd(digest digest.Digest) (*os.File, error) {
+func refToFilename(ref string) (string, error) {
+	// @TODO :D
+	return "test", nil
+}
 
-	newFile, err := mfToFilename(digest)
+func getManifestFd(digest digest.Digest, transaction string) (*os.File, error) {
+
+	newFile, err := mfToFilename(digest, transaction)
 	if err != nil {
 		return nil, err
 	}
@@ -81,11 +86,12 @@ func getManifestFd(digest digest.Digest) (*os.File, error) {
 	return fd, nil
 }
 
-func mfToFilename(digest digest.Digest) (string, error) {
+func mfToFilename(digest digest.Digest, transaction string) (string, error) {
 	// Store the manifests in a user's home to prevent conflict. The HOME dir needs to be set,
 	// but can only be forcibly set on Linux at this time.
 	// See https://github.com/docker/docker/pull/29478 for more background on why this approach
 	// is being used.
+	var dir string
 	if err := ensureHomeIfIAmStatic(); err != nil {
 		return "", err
 	}
@@ -93,7 +99,11 @@ func mfToFilename(digest digest.Digest) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dir := fmt.Sprintf("%s/.docker/manifests/", userHome)
+	if transaction != "" {
+		dir = fmt.Sprintf("%s/.docker/manifests/%s", userHome, transaction)
+	} else {
+		dir = fmt.Sprintf("%s/.docker/manifests/", userHome)
+	}
 	// Use the digest as the filename.
 	return fmt.Sprintf("%s%s", dir, digest.Hex()), nil
 
@@ -115,13 +125,13 @@ func unmarshalIntoManifestInspect(fd *os.File) (ImgManifestInspect, error) {
 	return newMf, nil
 }
 
-func updateMfFile(mf ImgManifestInspect) error {
+func updateMfFile(mf ImgManifestInspect, transaction string) error {
 	theBytes, err := json.Marshal(mf)
 	if err != nil {
 		return err
 	}
 
-	newFile, _ := mfToFilename(mf.Digest)
+	newFile, _ := mfToFilename(mf.Digest, transaction)
 	//Rewrite the file
 	fd, err := os.Create(newFile)
 	defer fd.Close()
