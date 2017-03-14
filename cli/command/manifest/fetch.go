@@ -63,8 +63,16 @@ func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 	return nil
 }
 
-func storeManifest(imgInspect *[]ImgManifestInspect, forIndex string) error {
-	// Store this image so that it can be annotated.
+// manifest can either be a fat manifest or a single manifest
+// transaction, if not "", is the transaction ID, which will be the path for the fat manifest's constituent manifests
+func loadManifest(manifest string, transaction string) ([]ImgManifestInspect, error) {
+
+	return nil, nil
+
+}
+
+func storeManifest(imgInspect *[]ImgManifestInspect, transaction string) error {
+	// Store this image manifest so that it can be annotated.
 
 	var (
 		err       error
@@ -73,7 +81,7 @@ func storeManifest(imgInspect *[]ImgManifestInspect, forIndex string) error {
 		overwrite bool
 	)
 
-	overwrite = forIndex == ""
+	overwrite = transaction == ""
 	// Store the manifests in a user's home to prevent conflict. The HOME dir needs to be set,
 	// but can only be forcibly set on Linux at this time.
 	// See https://github.com/docker/docker/pull/29478 for more background on why this approach
@@ -82,14 +90,14 @@ func storeManifest(imgInspect *[]ImgManifestInspect, forIndex string) error {
 		return err
 	}
 	userHome, err := homedir.GetStatic()
-	if forIndex == "" {
+	if transaction == "" {
 		newDir = fmt.Sprintf("%s/.docker/manifests/", userHome)
 	} else {
-		newDir = fmt.Sprintf("%s/.docker/manifests/%s", userHome, forIndex)
+		newDir = fmt.Sprintf("%s/.docker/manifests/%s", userHome, transaction)
 	}
 	os.MkdirAll(newDir, 0755)
 	for i, mf := range *imgInspect {
-		fd, err = getManifestFd(mf.Digest)
+		fd, err = getManifestFd(mf.Digest, transaction)
 		defer fd.Close()
 		if err != nil {
 			fmt.Printf("Store manifests: getManifestFd err: %s\n", err)
@@ -105,7 +113,7 @@ func storeManifest(imgInspect *[]ImgManifestInspect, forIndex string) error {
 			(*imgInspect)[i] = localMfstInspect
 			continue
 		} else {
-			if err = updateMfFile(mf); err != nil {
+			if err = updateMfFile(mf, transaction); err != nil {
 				// update overwrites, so can be used to make a new copy
 				fmt.Printf("Error writing new local manifest copy: %s\n", err)
 				return err
@@ -116,11 +124,16 @@ func storeManifest(imgInspect *[]ImgManifestInspect, forIndex string) error {
 	return nil
 }
 
-func getImageData(dockerCli *command.DockerCli, name string, forIndex string) ([]ImgManifestInspect, *registry.RepositoryInfo, error) {
+func getImageData(dockerCli *command.DockerCli, name string, transactionName string) ([]ImgManifestInspect, *registry.RepositoryInfo, error) {
 
 	var (
-		namedRef reference.Named
-		err      error
+		lastErr                error
+		discardNoSupportErrors bool
+		foundImages            []ImgManifestInspect
+		confirmedV2            bool
+		confirmedTLSRegistries = make(map[string]struct{})
+		namedRef               reference.Named
+		err                    error
 	)
 
 	if namedRef, err = reference.ParseNormalizedNamed(name); err != nil {
@@ -139,6 +152,16 @@ func getImageData(dockerCli *command.DockerCli, name string, forIndex string) ([
 		return nil, nil, err
 	}
 
+	// First check to see if stored locally, either in an ongoing transaction, or a single manfiest:
+	foundImages, err = loadManifest(name, transactionName)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Great, no reason to pull from the registry.
+	if len(foundImages) > 0 {
+		return foundImages, repoInfo, nil
+	}
+
 	ctx := context.Background()
 
 	authConfig := command.ResolveAuthConfig(ctx, dockerCli, repoInfo.Index)
@@ -153,14 +176,6 @@ func getImageData(dockerCli *command.DockerCli, name string, forIndex string) ([
 		return nil, nil, err
 	}
 	logrus.Debugf("manifest pull: endpoints: %v", endpoints)
-
-	var (
-		lastErr                error
-		discardNoSupportErrors bool
-		foundImages            []ImgManifestInspect
-		confirmedV2            bool
-		confirmedTLSRegistries = make(map[string]struct{})
-	)
 
 	// Try to find the first endpoint that is *both* v2 and using TLS.
 	for _, endpoint := range endpoints {
@@ -228,7 +243,7 @@ func getImageData(dockerCli *command.DockerCli, name string, forIndex string) ([
 			return nil, nil, err
 		}
 
-		if err := storeManifest(&foundImages, forIndex); err != nil {
+		if err := storeManifest(&foundImages, transactionName); err != nil {
 			logrus.Errorf("Error storing manifests: %s\n", err)
 		}
 		return foundImages, repoInfo, nil
