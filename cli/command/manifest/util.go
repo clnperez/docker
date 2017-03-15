@@ -64,6 +64,11 @@ func refToFilename(ref string) (string, error) {
 
 func getManifestFd(digest digest.Digest, transaction string) (*os.File, error) {
 
+	/*
+		So, when the manifest is modified the digest is no longer valid. You really need to have a
+		name pointing at a manifest, then modify the manifest, store it under the new
+		digest and update the name pointer.
+	*/
 	newFile, err := mfToFilename(digest, transaction)
 	if err != nil {
 		return nil, err
@@ -99,14 +104,12 @@ func mfToFilename(digest digest.Digest, transaction string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	dir = filepath.Join(userHome, ".docker/manifests")
 	if transaction != "" {
-		dir = fmt.Sprintf("%s/.docker/manifests/%s", userHome, transaction)
-	} else {
-		dir = fmt.Sprintf("%s/.docker/manifests/", userHome)
+		dir = filepath.Join(dir, transaction)
 	}
 	// Use the digest as the filename.
-	return fmt.Sprintf("%s%s", dir, digest.Hex()), nil
-
+	return filepath.Join(dir, digest.Hex()), nil
 }
 
 func unmarshalIntoManifestInspect(fd *os.File) (ImgManifestInspect, error) {
