@@ -71,7 +71,7 @@ func loadManifest(manifest string, transaction string) ([]ImgManifestInspect, er
 
 }
 
-func storeManifest(imgInspect *[]ImgManifestInspect, transaction string) error {
+func storeManifest(imgInspect []ImgManifestInspect, transaction string) error {
 	// Store this image manifest so that it can be annotated.
 
 	var (
@@ -98,6 +98,9 @@ func storeManifest(imgInspect *[]ImgManifestInspect, transaction string) error {
 	os.MkdirAll(newDir, 0755)
 	for i, mf := range *imgInspect {
 		fd, err = getManifestFd(mf.Digest, transaction)
+		if err != nil {
+			return err
+		}
 		defer fd.Close()
 		if err != nil {
 			fmt.Printf("Store manifests: getManifestFd err: %s\n", err)
@@ -243,7 +246,7 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionName str
 			return nil, nil, err
 		}
 
-		if err := storeManifest(&foundImages, transactionName); err != nil {
+		if err := storeManifest(foundImages, transactionName); err != nil {
 			logrus.Errorf("Error storing manifests: %s\n", err)
 		}
 		return foundImages, repoInfo, nil
