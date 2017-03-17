@@ -12,52 +12,43 @@ import (
 	"github.com/docker/docker/registry"
 )
 
-type createOpts struct {
-	newRef string
-}
-
 func newCreateListCommand(dockerCli *command.DockerCli) *cobra.Command {
 
-	opts := createOpts{}
-
 	cmd := &cobra.Command{
-		Use:   "create --name newRef manifest [manifest...]",
+		Use:   "create newRef manifest [manifest...]",
 		Short: "Push a manifest list for an image to a repository",
-		Args:  cli.RequiresMinArgs(1),
+		Args:  cli.RequiresMinArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return createManifestList(dockerCli, opts, args)
+			return createManifestList(dockerCli, args)
 		},
 	}
 
-	flags := cmd.Flags()
-	flags.StringVarP(&opts.newRef, "name", "n", "", "")
 	return cmd
 }
 
-func createManifestList(dockerCli *command.DockerCli, opts createOpts, manifests []string) error {
+func createManifestList(dockerCli *command.DockerCli, args []string) error {
 
 	// Just do some basic verification here, and leave the rest for when the user pushes the list
-	targetRef, err := reference.ParseNormalizedNamed(opts.newRef)
+	newRef := args[0]
+	targetRef, err := reference.ParseNormalizedNamed(newRef)
 	if err != nil {
-		return fmt.Errorf("Error parsing name for manifest list (%s): %v", opts.newRef, err)
+		return fmt.Errorf("Error parsing name for manifest list (%s): %v", newRef, err)
 	}
 	_, err = registry.ParseRepositoryInfo(targetRef)
 	if err != nil {
-		return fmt.Errorf("Error parsing repository name for manifest list (%s): %v", opts.newRef, err)
+		return fmt.Errorf("Error parsing repository name for manifest list (%s): %v", newRef, err)
 	}
 
-	transactionID, err := refToFilename(opts.newRef)
-	if err != nil {
-		return fmt.Errorf("Error creating manifest list transaction: %s", err)
-	}
+	transactionID := makeFilesafeName(targetRef.Name())
 
 	// Now create the local manifest list transaction by looking up the manifest schemas
 	// for the constituent images:
+	manifests := args[1:]
 	logrus.Info("Retrieving digests of images...")
 	for _, manifestRef := range manifests {
 
 		// This will store the canditate images' manifests locally
-		mfstData, _, err := getImageData(dockerCli, manifestRef, transactionID)
+		mfstData, _, err := getImageData(dockerCli, manifestRef, transactionID, true)
 		if err != nil {
 			return err
 		}

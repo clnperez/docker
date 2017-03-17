@@ -4,14 +4,15 @@ import (
 	"fmt"
 
 	//"github.com/Sirupsen/logrus"
+	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/cli"
 	"github.com/docker/docker/cli/command"
 	"github.com/spf13/cobra"
 )
 
 type annotateOptions struct {
-	target      string // the target manifest list name
-	image       string // the sub-manifest to annotate within the list
+	target      string // the target manifest list name (also transaction ID)
+	image       string // the manifest to annotate within the list
 	variant     string // an architecture variant
 	os          string
 	arch        string
@@ -49,10 +50,14 @@ func newAnnotateCommand(dockerCli *command.DockerCli) *cobra.Command {
 func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) error {
 
 	// Make sure the manifests are pulled, find the file you need, unmarshal the json, edit the file, and done.
-	// @TODO: Now that create is first (unless you're using a yaml file), this will always look for a locally-stored
-	// manifest under the "transaction" (folder) they specified on create. They should match (e.g. don't use docker.io/myrepo:latest,
-	// then later just myrepo.
-	imgInspect, _, err := getImageData(dockerCli, opts.image, opts.target)
+
+	// @TODO: Should we be able to annotate a digest? like `docker pull ubuntu@sha256:45b2...`
+	targetRef, err := reference.ParseNormalizedNamed(opts.target)
+	if err != nil {
+		return fmt.Errorf("Annotate: Error parsing name for manifest list (%s): %v", opts.target, err)
+	}
+	transactionID := makeFilesafeName(targetRef.Name())
+	imgInspect, _, err := getImageData(dockerCli, opts.image, transactionID, false)
 	if err != nil {
 		return err
 	}
@@ -63,7 +68,7 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 
 	mf := imgInspect[0]
 
-	fd, err := getManifestFd(mf.Digest, opts.target)
+	fd, err := getManifestFd(mf.NormalName, targetRef.Name())
 	if err != nil {
 		return err
 	}
@@ -99,8 +104,9 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 	if opts.variant != "" {
 		newMf.Platform.Variant = opts.variant
 	}
+	// @TODO: Recalculate the digest here
 
-	if err := updateMfFile(newMf, opts.target); err != nil {
+	if err := updateMfFile(newMf, targetRef.Name()); err != nil {
 		return err
 	}
 

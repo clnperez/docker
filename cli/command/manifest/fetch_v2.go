@@ -77,6 +77,7 @@ func (mf *v2ManifestFetcher) fetchWithRepository(ctx context.Context, ref refere
 		imageList   = []ImgManifestInspect{}
 	)
 
+	logrus.Debugf("Fetching v2 manifest: %s", mf.repoInfo.Name)
 	manSvc, err := mf.repo.Manifests(ctx)
 	if err != nil {
 		return nil, err
@@ -151,7 +152,7 @@ func (mf *v2ManifestFetcher) fetchWithRepository(ctx context.Context, ref refere
 	}
 
 	for idx, img := range images {
-		imgReturn := makeImgManifestInspect(img, tagOrDigest, mfInfos[idx], mediaType[idx], tagList)
+		imgReturn := makeImgManifestInspect(mf.repoInfo.Name.Name(), img, tagOrDigest, mfInfos[idx], mediaType[idx], tagList)
 		imageList = append(imageList, *imgReturn)
 	}
 	return imageList, nil
