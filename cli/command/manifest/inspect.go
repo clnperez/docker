@@ -46,9 +46,12 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 		imgInspect []ImgManifestInspect
 	)
 
-	name := opts.remote
-	// @TODO: Path or not?
-	imgInspect, _, err := getImageData(dockerCli, name, "")
+	name, err := reference.ParseNormalizedName(opts.remote)
+	if err != nil {
+		return err
+	}
+	// @TODO: transaction or not? This could be a single manifest or manifest list
+	imgInspect, _, err := getImageData(dockerCli, name, "", false)
 	if err != nil {
 		logrus.Fatal(err)
 	}

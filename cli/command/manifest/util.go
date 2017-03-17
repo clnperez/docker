@@ -6,12 +6,13 @@ package manifest
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/homedir"
-	"github.com/opencontainers/go-digest"
+	//"github.com/opencontainers/go-digest"
 )
 
 type osArch struct {
@@ -57,24 +58,40 @@ func isValidOSArch(os string, arch string) bool {
 	return ok
 }
 
-func refToFilename(ref string) (string, error) {
-	// @TODO :D
-	return "test", nil
+func makeFilesafeName(ref string) string {
+	// Make sure the ref is a normalized name before calling this func
+	logrus.Debugf("makeFilesafeName: Normalized name: %s", ref)
+	fileName := strings.Replace(ref, ":", "-", -1)
+	fileName = strings.Replace(fileName, "/", "_", -1)
+	return fileName
 }
 
-func getManifestFd(digest digest.Digest, transaction string) (*os.File, error) {
+func getTransactionDirFd(transaction string) (*os.File, error) {
+	baseDir, err := buildBaseFilename()
+	if err != nil {
+		return nil, err
+	}
+	transactionDir := filepath.Join(baseDir, transaction)
+	return getFdGeneric(transactionDir)
+}
+
+func getManifestFd(manifest, transaction string) (*os.File, error) {
 
 	/*
 		So, when the manifest is modified the digest is no longer valid. You really need to have a
 		name pointing at a manifest, then modify the manifest, store it under the new
 		digest and update the name pointer.
 	*/
-	newFile, err := mfToFilename(digest, transaction)
+	newFile, err := mfToFilename(manifest, transaction)
 	if err != nil {
 		return nil, err
 	}
 
-	fileInfo, err := os.Stat(newFile)
+	return getFdGeneric(newFile)
+}
+
+func getFdGeneric(file string) (*os.File, error) {
+	fileInfo, err := os.Stat(file)
 	if err != nil && !os.IsNotExist(err) {
 		logrus.Debugf("Something went wrong trying to locate the manifest file: %s", err)
 		return nil, err
@@ -83,7 +100,7 @@ func getManifestFd(digest digest.Digest, transaction string) (*os.File, error) {
 	if fileInfo == nil {
 		return nil, nil
 	}
-	fd, err := os.Open(newFile)
+	fd, err := os.Open(file)
 	if err != nil {
 		return nil, err
 	}
@@ -91,12 +108,11 @@ func getManifestFd(digest digest.Digest, transaction string) (*os.File, error) {
 	return fd, nil
 }
 
-func mfToFilename(digest digest.Digest, transaction string) (string, error) {
+func buildBaseFilename() (string, error) {
 	// Store the manifests in a user's home to prevent conflict. The HOME dir needs to be set,
 	// but can only be forcibly set on Linux at this time.
 	// See https://github.com/docker/docker/pull/29478 for more background on why this approach
 	// is being used.
-	var dir string
 	if err := ensureHomeIfIAmStatic(); err != nil {
 		return "", err
 	}
@@ -104,12 +120,20 @@ func mfToFilename(digest digest.Digest, transaction string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dir = filepath.Join(userHome, ".docker/manifests")
-	if transaction != "" {
-		dir = filepath.Join(dir, transaction)
+	return filepath.Join(userHome, ".docker/manifests"), nil
+}
+
+func mfToFilename(manifest, transaction string) (string, error) {
+
+	baseDir, err := buildBaseFilename()
+	if err != nil {
+		return "", nil
 	}
 	// Use the digest as the filename.
-	return filepath.Join(dir, digest.Hex()), nil
+	if transaction != "" {
+		baseDir = filepath.Join(baseDir, transaction)
+	}
+	return filepath.Join(baseDir, manifest), nil
 }
 
 func unmarshalIntoManifestInspect(fd *os.File) (ImgManifestInspect, error) {
@@ -134,7 +158,7 @@ func updateMfFile(mf ImgManifestInspect, transaction string) error {
 		return err
 	}
 
-	newFile, _ := mfToFilename(mf.Digest, transaction)
+	newFile, _ := mfToFilename(makeFilesafeName(mf.NormalName), transaction)
 	//Rewrite the file
 	fd, err := os.Create(newFile)
 	defer fd.Close()

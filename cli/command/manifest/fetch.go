@@ -3,6 +3,7 @@ package manifest
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -54,34 +55,31 @@ func newListFetchCommand(dockerCli *command.DockerCli) *cobra.Command {
 
 func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 	// Get the data and then format it
-	name := opts.remote
-	_, _, err := getImageData(dockerCli, name, "")
+	named, err := reference.ParseNormalizedName(opts.remote)
 	if err != nil {
-		logrus.Fatal(err)
+		return err
 	}
-
+	// This could be a single manifest or manifest list
+	_, _, err := getImageData(dockerCli, named.Name(), "", true)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-// manifest can either be a fat manifest or a single manifest
-// transaction, if not "", is the transaction ID, which will be the path for the fat manifest's constituent manifests
 func loadManifest(manifest string, transaction string) ([]ImgManifestInspect, error) {
-
 	return nil, nil
-
 }
 
-func storeManifest(imgInspect []ImgManifestInspect, transaction string) error {
+func storeManifest(imgInspect []ImgManifestInspect, transaction string, overwrite bool) error {
 	// Store this image manifest so that it can be annotated.
 
 	var (
-		err       error
-		fd        *os.File
-		newDir    string
-		overwrite bool
+		err    error
+		fd     *os.File
+		newDir string
 	)
 
-	overwrite = transaction == ""
 	// Store the manifests in a user's home to prevent conflict. The HOME dir needs to be set,
 	// but can only be forcibly set on Linux at this time.
 	// See https://github.com/docker/docker/pull/29478 for more background on why this approach
@@ -127,7 +125,7 @@ func storeManifest(imgInspect []ImgManifestInspect, transaction string) error {
 	return nil
 }
 
-func getImageData(dockerCli *command.DockerCli, name string, transactionName string) ([]ImgManifestInspect, *registry.RepositoryInfo, error) {
+func getImageData(dockerCli *command.DockerCli, name string, transactionID string, pullRemote bool) ([]ImgManifestInspect, *registry.RepositoryInfo, error) {
 
 	var (
 		lastErr                error
@@ -156,13 +154,15 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionName str
 	}
 
 	// First check to see if stored locally, either in an ongoing transaction, or a single manfiest:
-	foundImages, err = loadManifest(name, transactionName)
-	if err != nil {
-		return nil, nil, err
-	}
-	// Great, no reason to pull from the registry.
-	if len(foundImages) > 0 {
-		return foundImages, repoInfo, nil
+	if !pullRemote { // if fetching, always just pull & store
+		foundImages, err = loadManifests(namedRef.Name(), transactionID)
+		if err != nil {
+			return nil, nil, err
+		}
+		// Great, no reason to pull from the registry.
+		if len(foundImages) > 0 {
+			return foundImages, repoInfo, nil
+		}
 	}
 
 	ctx := context.Background()
@@ -246,7 +246,7 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionName str
 			return nil, nil, err
 		}
 
-		if err := storeManifest(foundImages, transactionName); err != nil {
+		if err := storeManifest(foundImages, transactionID); err != nil {
 			logrus.Errorf("Error storing manifests: %s\n", err)
 		}
 		return foundImages, repoInfo, nil
@@ -280,7 +280,7 @@ func newManifestFetcher(endpoint registry.APIEndpoint, repoInfo *registry.Reposi
 	return nil, fmt.Errorf("unknown version %d for registry %s", endpoint.Version, endpoint.URL)
 }
 
-func makeImgManifestInspect(img *image.Image, tag string, mfInfo manifestInfo, mediaType string, tagList []string) *ImgManifestInspect {
+func makeImgManifestInspect(name string, img *image.Image, tag string, mfInfo manifestInfo, mediaType string, tagList []string) *ImgManifestInspect {
 	var digest digest.Digest
 	if err := mfInfo.digest.Validate(); err == nil {
 		digest = mfInfo.digest
@@ -290,6 +290,7 @@ func makeImgManifestInspect(img *image.Image, tag string, mfInfo manifestInfo, m
 		digests = append(digests, blobDigest.String())
 	}
 	return &ImgManifestInspect{
+		NormalName:      name,
 		Size:            mfInfo.length,
 		MediaType:       mediaType,
 		Tag:             tag,

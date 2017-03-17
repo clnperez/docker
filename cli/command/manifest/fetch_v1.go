@@ -85,6 +85,7 @@ func (mf *v1ManifestFetcher) fetchWithSession(ctx context.Context, ref reference
 		pulledImg *image.Image
 		tagsMap   map[string]string
 	)
+	logrus.Debugf("Fetching v1 manifest for %s", mf.repoInfo.Name)
 	repoData, err := mf.session.GetRepositoryData(mf.repoInfo.Name)
 	if err != nil {
 		if strings.Contains(err.Error(), "HTTP code: 404") {
@@ -151,7 +152,7 @@ func (mf *v1ManifestFetcher) fetchWithSession(ctx context.Context, ref reference
 		return nil, fmt.Errorf("No such image %s:%s", mf.repoInfo.Name.Name(), tag)
 	}
 
-	imageInsp := makeImgManifestInspect(pulledImg, tag, manifestInfo{}, schema1.MediaTypeManifest, tagList)
+	imageInsp := makeImgManifestInspect(mf.repoInfo.Name.Name(), pulledImg, tag, manifestInfo{}, schema1.MediaTypeManifest, tagList)
 	imageList = append(imageList, *imageInsp)
 	return imageList, nil
 }
