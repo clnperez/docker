@@ -163,7 +163,7 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, manifests []st
 	logrus.Info("Retrieving digests of images...")
 	for _, manifestRef := range manifests {
 
-		mfstData, repoInfo, err := getImageData(dockerCli, manifestRef, manifestRef)
+		mfstData, repoInfo, err := getImageData(dockerCli, manifestRef, manifestRef, false)
 		if err != nil {
 			return err
 		}
