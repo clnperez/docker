@@ -3,7 +3,7 @@ package manifest
 import (
 	"fmt"
 	"os"
-	"path/filepath"
+	//"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -55,12 +55,12 @@ func newListFetchCommand(dockerCli *command.DockerCli) *cobra.Command {
 
 func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 	// Get the data and then format it
-	named, err := reference.ParseNormalizedName(opts.remote)
+	named, err := reference.ParseNormalizedNamed(opts.remote)
 	if err != nil {
 		return err
 	}
 	// This could be a single manifest or manifest list
-	_, _, err := getImageData(dockerCli, named.Name(), "", true)
+	_, _, err = getImageData(dockerCli, named.Name(), "", true)
 	if err != nil {
 		return err
 	}
@@ -68,15 +68,38 @@ func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 }
 
 func loadManifest(manifest string, transaction string) ([]ImgManifestInspect, error) {
-	return nil, nil
+
+	// Load either a single manifest (if transaction is "", that's fine), or a
+	// manifest list
+	var foundImages []ImgManifestInspect
+	fd, err := getManifestFd(manifest, transaction)
+	if err != nil {
+		return nil, err
+	}
+	if fd != nil {
+		defer fd.Close()
+		fileInfo, err := fd.Stat()
+		if err != nil {
+			return nil, err
+		}
+		if fileInfo.IsDir() { // manifest list transaction
+			// @TODO!
+			return nil, nil
+		} else { // An individual manifest
+			mfInspect, err := unmarshalIntoManifestInspect(fd)
+			if err != nil {
+				return append(foundImages, mfInspect), nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("No manifest found matching %s", manifest)
 }
 
-func storeManifest(imgInspect []ImgManifestInspect, transaction string, overwrite bool) error {
+func storeManifests(imgInspect []ImgManifestInspect, transaction string) error {
 	// Store this image manifest so that it can be annotated.
 
 	var (
 		err    error
-		fd     *os.File
 		newDir string
 	)
 
@@ -94,32 +117,12 @@ func storeManifest(imgInspect []ImgManifestInspect, transaction string, overwrit
 		newDir = fmt.Sprintf("%s/.docker/manifests/%s", userHome, transaction)
 	}
 	os.MkdirAll(newDir, 0755)
-	for i, mf := range *imgInspect {
-		fd, err = getManifestFd(mf.Digest, transaction)
-		if err != nil {
+	for _, mf := range imgInspect {
+		if err = updateMfFile(mf, transaction); err != nil {
+			fmt.Printf("Error writing local manifest copy: %s\n", err)
 			return err
 		}
-		defer fd.Close()
-		if err != nil {
-			fmt.Printf("Store manifests: getManifestFd err: %s\n", err)
-			return err
-		}
-		if fd != nil && overwrite == false {
-			logrus.Debug("Not overwriting existing manifest file")
-			localMfstInspect, err := unmarshalIntoManifestInspect(fd)
-			if err != nil {
-				fmt.Printf("Store: Marshal error for %s: %s\n", mf.Tag, err)
-				return err
-			}
-			(*imgInspect)[i] = localMfstInspect
-			continue
-		} else {
-			if err = updateMfFile(mf, transaction); err != nil {
-				// update overwrites, so can be used to make a new copy
-				fmt.Printf("Error writing new local manifest copy: %s\n", err)
-				return err
-			}
-		}
+
 	}
 
 	return nil
@@ -155,7 +158,7 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 
 	// First check to see if stored locally, either in an ongoing transaction, or a single manfiest:
 	if !pullRemote { // if fetching, always just pull & store
-		foundImages, err = loadManifests(namedRef.Name(), transactionID)
+		foundImages, err = loadManifest(namedRef.Name(), transactionID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -246,7 +249,7 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 			return nil, nil, err
 		}
 
-		if err := storeManifest(foundImages, transactionID); err != nil {
+		if err := storeManifests(foundImages, transactionID); err != nil {
 			logrus.Errorf("Error storing manifests: %s\n", err)
 		}
 		return foundImages, repoInfo, nil
