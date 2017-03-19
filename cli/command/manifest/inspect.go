@@ -8,6 +8,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 
+	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/cli"
 	"github.com/docker/docker/cli/command"
 	"github.com/spf13/cobra"
@@ -46,12 +47,12 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 		imgInspect []ImgManifestInspect
 	)
 
-	name, err := reference.ParseNormalizedName(opts.remote)
+	named, err := reference.ParseNormalizedNamed(opts.remote)
 	if err != nil {
 		return err
 	}
 	// @TODO: transaction or not? This could be a single manifest or manifest list
-	imgInspect, _, err := getImageData(dockerCli, name, "", false)
+	imgInspect, _, err = getImageData(dockerCli, named.Name(), "", false)
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -72,7 +73,7 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 	// output basic informative details about the image
 	if len(imgInspect) == 1 {
 		// this is a basic single manifest
-		fmt.Fprintf(dockerCli.Out(), "%s: manifest type: %s\n", name, imgInspect[0].MediaType)
+		fmt.Fprintf(dockerCli.Out(), "%s: manifest type: %s\n", opts.remote, imgInspect[0].MediaType)
 		fmt.Fprintf(dockerCli.Out(), "      Digest: %s\n", imgInspect[0].Digest)
 		fmt.Fprintf(dockerCli.Out(), "Architecture: %s\n", imgInspect[0].Architecture)
 		fmt.Fprintf(dockerCli.Out(), "          OS: %s\n", imgInspect[0].Os)

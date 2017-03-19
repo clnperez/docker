@@ -77,17 +77,12 @@ func getTransactionDirFd(transaction string) (*os.File, error) {
 
 func getManifestFd(manifest, transaction string) (*os.File, error) {
 
-	/*
-		So, when the manifest is modified the digest is no longer valid. You really need to have a
-		name pointing at a manifest, then modify the manifest, store it under the new
-		digest and update the name pointer.
-	*/
-	newFile, err := mfToFilename(manifest, transaction)
+	fileName, err := mfToFilename(manifest, transaction)
 	if err != nil {
 		return nil, err
 	}
 
-	return getFdGeneric(newFile)
+	return getFdGeneric(fileName)
 }
 
 func getFdGeneric(file string) (*os.File, error) {
@@ -129,11 +124,7 @@ func mfToFilename(manifest, transaction string) (string, error) {
 	if err != nil {
 		return "", nil
 	}
-	// Use the digest as the filename.
-	if transaction != "" {
-		baseDir = filepath.Join(baseDir, transaction)
-	}
-	return filepath.Join(baseDir, manifest), nil
+	return filepath.Join(baseDir, transaction, manifest), nil
 }
 
 func unmarshalIntoManifestInspect(fd *os.File) (ImgManifestInspect, error) {
@@ -152,19 +143,18 @@ func unmarshalIntoManifestInspect(fd *os.File) (ImgManifestInspect, error) {
 	return newMf, nil
 }
 
-func updateMfFile(mf ImgManifestInspect, transaction string) error {
-	theBytes, err := json.Marshal(mf)
+func updateMfFile(newMf ImgManifestInspect, transaction string) error {
+	theBytes, err := json.Marshal(newMf)
 	if err != nil {
 		return err
 	}
 
-	newFile, _ := mfToFilename(makeFilesafeName(mf.NormalName), transaction)
-	//Rewrite the file
+	newFile, _ := mfToFilename(makeFilesafeName(newMf.NormalName), transaction)
 	fd, err := os.Create(newFile)
-	defer fd.Close()
 	if err != nil {
 		return err
 	}
+	defer fd.Close()
 	if _, err := fd.Write(theBytes); err != nil {
 		return err
 	}
