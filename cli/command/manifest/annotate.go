@@ -120,7 +120,9 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 	if opts.variant != "" {
 		newMf.Platform.Variant = opts.variant
 	}
-	// @TODO: Recalculate the digest here
+
+	// @TODO
+	// dgst := digest.FromBytes(b) can't use b/c not of the json.
 
 	if err := updateMfFile(newMf, imgID, transactionID); err != nil {
 		return err
