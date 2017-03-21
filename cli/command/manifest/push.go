@@ -108,6 +108,8 @@ func newPushListCommand(dockerCli *command.DockerCli) *cobra.Command {
 }
 
 func putManifestList(dockerCli *command.DockerCli, opts pushOpts, manifests []string) error {
+	// @TODO: Take out the manifests arg and only push from either a pre-annotated yaml file,
+	// or a pre-annotated local transaction.
 	var (
 		//yamlInput         YAMLInput
 		manifestList      manifestlist.ManifestList
@@ -163,7 +165,7 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, manifests []st
 	logrus.Info("Retrieving digests of images...")
 	for _, manifestRef := range manifests {
 
-		mfstData, repoInfo, err := getImageData(dockerCli, manifestRef, manifestRef, false)
+		mfstData, repoInfo, err := getImageData(dockerCli, manifestRef, manifestRef, true)
 		if err != nil {
 			return err
 		}

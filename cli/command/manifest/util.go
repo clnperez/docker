@@ -60,7 +60,7 @@ func isValidOSArch(os string, arch string) bool {
 
 func makeFilesafeName(ref string) string {
 	// Make sure the ref is a normalized name before calling this func
-	logrus.Debugf("makeFilesafeName: Normalized name: %s", ref)
+	// @TODO: Handle "@sha"
 	fileName := strings.Replace(ref, ":", "-", -1)
 	fileName = strings.Replace(fileName, "/", "_", -1)
 	return fileName
@@ -86,14 +86,12 @@ func getManifestFd(manifest, transaction string) (*os.File, error) {
 }
 
 func getFdGeneric(file string) (*os.File, error) {
-	fileInfo, err := os.Stat(file)
-	if err != nil && !os.IsNotExist(err) {
-		logrus.Debugf("Something went wrong trying to locate the manifest file: %s", err)
-		return nil, err
-	}
-
-	if fileInfo == nil {
+	_, err := os.Stat(file)
+	if err != nil && os.IsNotExist(err) {
+		logrus.Debugf("Manifest file %s not found.", file)
 		return nil, nil
+	} else {
+		return nil, err
 	}
 	fd, err := os.Open(file)
 	if err != nil {
@@ -115,7 +113,7 @@ func buildBaseFilename() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(userHome, ".docker/manifests"), nil
+	return filepath.Join(userHome, ".docker", "manifests"), nil
 }
 
 func mfToFilename(manifest, transaction string) (string, error) {
@@ -143,19 +141,34 @@ func unmarshalIntoManifestInspect(fd *os.File) (ImgManifestInspect, error) {
 	return newMf, nil
 }
 
-func updateMfFile(newMf ImgManifestInspect, transaction string) error {
+func updateMfFile(newMf ImgManifestInspect, mfName, transaction string) error {
+	var (
+		fd  *os.File
+		err error
+	)
+	fd, err = getManifestFd(makeFilesafeName(mfName), transaction)
+	if err != nil {
+		return err
+	}
+	if fd == nil {
+		newFile, _ := mfToFilename(mfName, transaction)
+		logrus.Debugf("Creating local copy of manifest %s", mfName)
+		fd, err = os.Create(newFile)
+		if err != nil {
+			return err
+		}
+	} else {
+		logrus.Debugf("Updating local copy of manifest %s", mfName)
+	}
+	defer fd.Close()
 	theBytes, err := json.Marshal(newMf)
 	if err != nil {
+		logrus.Debugf("AH!")
 		return err
 	}
 
-	newFile, _ := mfToFilename(makeFilesafeName(newMf.NormalName), transaction)
-	fd, err := os.Create(newFile)
-	if err != nil {
-		return err
-	}
-	defer fd.Close()
 	if _, err := fd.Write(theBytes); err != nil {
+		logrus.Debugf("AH!!")
 		return err
 	}
 	return nil
