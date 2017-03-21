@@ -73,7 +73,6 @@ func loadManifest(manifest string, transaction string) ([]ImgManifestInspect, er
 	// Load either a single manifest (if transaction is "", that's fine), or a
 	// manifest list
 	var foundImages []ImgManifestInspect
-	logrus.Debugf("loading %s/%s", manifest, transaction)
 	fd, err := getManifestFd(manifest, transaction)
 	if err != nil {
 		return nil, err
@@ -90,8 +89,9 @@ func loadManifest(manifest string, transaction string) ([]ImgManifestInspect, er
 		} else { // An individual manifest
 			mfInspect, err := unmarshalIntoManifestInspect(fd)
 			if err != nil {
-				return append(foundImages, mfInspect), nil
+				return nil, err
 			}
+			return append(foundImages, mfInspect), nil
 		}
 	}
 	return nil, nil
@@ -118,22 +118,29 @@ func storeManifest(imgInspect ImgManifestInspect, name, transaction string) erro
 func getImageData(dockerCli *command.DockerCli, name string, transactionID string, fetchOnly bool) ([]ImgManifestInspect, *registry.RepositoryInfo, error) {
 
 	var (
-		lastErr                error
-		discardNoSupportErrors bool
-		foundImages            []ImgManifestInspect
-		confirmedV2            bool
-		confirmedTLSRegistries = make(map[string]struct{})
-		namedRef               reference.Named
-		err                    error
-		normalName             string
+		lastErr                    error
+		discardNoSupportErrors     bool
+		foundImages                []ImgManifestInspect
+		confirmedV2                bool
+		confirmedTLSRegistries     = make(map[string]struct{})
+		namedRef, transactionNamed reference.Named
+		err                        error
+		normalName                 string
 	)
 
 	if namedRef, err = reference.ParseNormalizedNamed(name); err != nil {
 		return nil, nil, fmt.Errorf("Error parsing reference for %s: %s\n", name, err)
 	}
-	// Make sure it has a tag, as long as it's not a digest
+	if transactionNamed, err = reference.ParseNormalizedNamed(transactionID); err != nil {
+		return nil, nil, fmt.Errorf("Error parsing reference for %s: %s\n", transactionID, err)
+	}
+
+	// Make sure these have a tag, as long as it's not a digest
 	if _, isDigested := namedRef.(reference.Canonical); !isDigested {
 		namedRef = reference.TagNameOnly(namedRef)
+	}
+	if _, isDigested := transactionNamed.(reference.Canonical); !isDigested {
+		transactionNamed = reference.TagNameOnly(transactionNamed)
 	}
 	normalName = namedRef.String()
 	logrus.Debugf("getting image data for ref: %s", normalName)
@@ -147,7 +154,7 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 
 	// First check to see if stored locally, either a single manfiest or list:
 	logrus.Debugf("Checking locally for %s", normalName)
-	foundImages, err = loadManifest(makeFilesafeName(normalName), makeFilesafeName(transactionID))
+	foundImages, err = loadManifest(makeFilesafeName(normalName), makeFilesafeName(transactionNamed.String()))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -155,7 +162,6 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 	if len(foundImages) > 0 {
 		return foundImages, repoInfo, nil
 	}
-	logrus.Debugf("manifest for %s not found in local cache.", normalName)
 
 	ctx := context.Background()
 
@@ -240,7 +246,6 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 		}
 
 		if transactionID == "" && len(foundImages) > 1 {
-			logrus.Debugf("This fetch was for a manifest list")
 			transactionID = normalName
 		}
 		// Additionally, we're never storing on inspect, so if we're asked to save images it's for a create,
@@ -248,7 +253,7 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 		// image name *and* a transaction ID. IOW, foundImages will be only one image.
 		if !fetchOnly {
 			// @TODO: assert that len(foundImages) == 1
-			if err := storeManifest(foundImages[0], makeFilesafeName(normalName), transactionID); err != nil {
+			if err := storeManifest(foundImages[0], makeFilesafeName(normalName), makeFilesafeName(transactionNamed.String())); err != nil {
 				logrus.Errorf("Error storing manifests: %s\n", err)
 			}
 		}

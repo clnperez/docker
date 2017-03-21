@@ -39,16 +39,13 @@ func createManifestList(dockerCli *command.DockerCli, args []string) error {
 		return fmt.Errorf("Error parsing repository name for manifest list (%s): %v", newRef, err)
 	}
 
-	transactionID := makeFilesafeName(targetRef.Name())
-
 	// Now create the local manifest list transaction by looking up the manifest schemas
 	// for the constituent images:
 	manifests := args[1:]
 	logrus.Info("Retrieving digests of images...")
 	for _, manifestRef := range manifests {
 
-		// @TODO: Remove the bool from this func
-		mfstData, _, err := getImageData(dockerCli, manifestRef, transactionID, false)
+		mfstData, _, err := getImageData(dockerCli, manifestRef, targetRef.Name(), false)
 		if err != nil {
 			return err
 		}
