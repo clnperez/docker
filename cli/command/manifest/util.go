@@ -141,23 +141,16 @@ func unmarshalIntoManifestInspect(fd *os.File) (ImgManifestInspect, error) {
 }
 
 func updateMfFile(newMf ImgManifestInspect, mfName, transaction string) error {
-	var (
-		fd  *os.File
-		err error
-	)
-	fd, err = getManifestFd(makeFilesafeName(mfName), transaction)
+	fileName, err := mfToFilename(mfName, transaction)
 	if err != nil {
 		return err
 	}
-	if fd == nil {
-		newFile, _ := mfToFilename(mfName, transaction)
-		logrus.Debugf("Creating local copy of manifest %s", mfName)
-		fd, err = os.Create(newFile)
-		if err != nil {
-			return err
-		}
-	} else {
-		logrus.Debugf("Updating local copy of manifest %s", mfName)
+	if err := os.Remove(fileName); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	fd, err := os.Create(fileName)
+	if err != nil {
+		return err
 	}
 	defer fd.Close()
 	theBytes, err := json.Marshal(newMf)
