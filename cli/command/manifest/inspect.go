@@ -51,8 +51,7 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 	if err != nil {
 		return err
 	}
-	// @TODO: transaction or not? This could be a single manifest or manifest list
-	imgInspect, _, err = getImageData(dockerCli, named.Name(), "", false)
+	imgInspect, _, err = getImageData(dockerCli, named.Name(), "", true)
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -85,7 +84,7 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 	}
 
 	// More than one response. This is a manifest list.
-	//fmt.Printf("%s is a manifest list containing the following %d manifest references:\n", name, len(imgInspect))
+	fmt.Printf("%s is a manifest list containing the following %d manifest references:\n", named.String(), len(imgInspect))
 	for i, img := range imgInspect {
 		// @TODO: These tags are wonky. e.g.: "Repo Tags: 0ppc64le_hello-world,1library_hello-world"
 		// There may be any number of repo tags here, so fix this or get an out of bounds error:

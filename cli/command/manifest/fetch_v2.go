@@ -152,7 +152,7 @@ func (mf *v2ManifestFetcher) fetchWithRepository(ctx context.Context, ref refere
 	}
 
 	for idx, img := range images {
-		imgReturn := makeImgManifestInspect(mf.repoInfo.Name.Name(), img, tagOrDigest, mfInfos[idx], mediaType[idx], tagList)
+		imgReturn := makeImgManifestInspect(img, tagOrDigest, mfInfos[idx], mediaType[idx], tagList)
 		imageList = append(imageList, *imgReturn)
 	}
 	return imageList, nil
@@ -474,6 +474,7 @@ func (mf *v2ManifestFetcher) pullManifestList(ctx context.Context, ref reference
 	logrus.Debugf("Pulling manifest list entries for ML digest %v", manifestListDigest)
 
 	for _, manifestDescriptor := range mfstList.Manifests {
+		logrus.Debugf("mf descriptor: %s", manifestDescriptor)
 		manSvc, err := mf.repo.Manifests(ctx)
 		if err != nil {
 			return nil, nil, nil, err

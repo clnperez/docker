@@ -47,8 +47,8 @@ func createManifestList(dockerCli *command.DockerCli, args []string) error {
 	logrus.Info("Retrieving digests of images...")
 	for _, manifestRef := range manifests {
 
-		// This will store the canditate images' manifests locally
-		mfstData, _, err := getImageData(dockerCli, manifestRef, transactionID, true)
+		// @TODO: Remove the bool from this func
+		mfstData, _, err := getImageData(dockerCli, manifestRef, transactionID, false)
 		if err != nil {
 			return err
 		}

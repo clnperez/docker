@@ -3,7 +3,7 @@ package manifest
 import (
 	"fmt"
 
-	//"github.com/Sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/cli"
 	"github.com/docker/docker/cli/command"
@@ -27,7 +27,7 @@ func newAnnotateCommand(dockerCli *command.DockerCli) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "annotate NAME[:TAG] [OPTIONS]",
 		Short: "Add additional information to an image's manifest.",
-		Args:  cli.ExactArgs(1),
+		Args:  cli.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.target = args[0]
 			opts.image = args[1]
@@ -54,7 +54,11 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 	// @TODO: Should we be able to annotate a digest? like `docker pull ubuntu@sha256:45b2...`
 	targetRef, err := reference.ParseNormalizedNamed(opts.target)
 	if err != nil {
-		return fmt.Errorf("Annotate: Error parsing name for manifest list (%s): %v", opts.target, err)
+		return fmt.Errorf("Annotate: Error parsing name for manifest list (%s): %s", opts.target, err)
+	}
+	imgRef, err := reference.ParseNormalizedNamed(opts.image)
+	if err != nil {
+		return fmt.Errorf("Annotate: Error prasing name for manifest (%s): %s:", opts.image, err)
 	}
 	transactionID := makeFilesafeName(targetRef.Name())
 	imgInspect, _, err := getImageData(dockerCli, opts.image, transactionID, false)
@@ -67,8 +71,9 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 	}
 
 	mf := imgInspect[0]
+	logrus.Debugf("Retreived image to annotate")
 
-	fd, err := getManifestFd(mf.NormalName, targetRef.Name())
+	fd, err := getManifestFd(makeFilesafeName(imgRef.String()), transactionID)
 	if err != nil {
 		return err
 	}
@@ -77,6 +82,8 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 	if err != nil {
 		return err
 	}
+
+	logrus.Debugf("Annotating %s", imgRef.String())
 
 	// Update the mf
 	// @TODO: Prevent duplicates
@@ -106,7 +113,7 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 	}
 	// @TODO: Recalculate the digest here
 
-	if err := updateMfFile(newMf, targetRef.Name()); err != nil {
+	if err := updateMfFile(newMf, makeFilesafeName(imgRef.String()), makeFilesafeName(targetRef.Name())); err != nil {
 		return err
 	}
 
