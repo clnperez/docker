@@ -90,14 +90,13 @@ func getFdGeneric(file string) (*os.File, error) {
 	if err != nil && os.IsNotExist(err) {
 		logrus.Debugf("Manifest file %s not found.", file)
 		return nil, nil
-	} else {
+	} else if err != nil {
 		return nil, err
 	}
-	fd, err := os.Open(file)
+	fd, err := os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, err
 	}
-
 	return fd, nil
 }
 
@@ -163,12 +162,10 @@ func updateMfFile(newMf ImgManifestInspect, mfName, transaction string) error {
 	defer fd.Close()
 	theBytes, err := json.Marshal(newMf)
 	if err != nil {
-		logrus.Debugf("AH!")
 		return err
 	}
 
 	if _, err := fd.Write(theBytes); err != nil {
-		logrus.Debugf("AH!!")
 		return err
 	}
 	return nil

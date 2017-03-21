@@ -62,10 +62,18 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 		return fmt.Errorf("Annotate: Error prasing name for manifest (%s): %s:", opts.image, err)
 	}
 
-	transactionID := makeFilesafeName(targetRef.Name())
-	logrus.Debugf("Beginning annotate for %s/%s", opts.image, transactionID)
+	// Make sure we've got tags or digests:
+	if _, isDigested := targetRef.(reference.Canonical); !isDigested {
+		targetRef = reference.TagNameOnly(targetRef)
+	}
+	if _, isDigested := imgRef.(reference.Canonical); !isDigested {
+		imgRef = reference.TagNameOnly(imgRef)
+	}
+	transactionID := makeFilesafeName(targetRef.String())
+	imgID := makeFilesafeName(imgRef.String())
+	logrus.Debugf("Beginning annotate for %s/%s", transactionID, imgID)
 
-	imgInspect, _, err := getImageData(dockerCli, opts.image, transactionID, false)
+	imgInspect, _, err := getImageData(dockerCli, imgRef.String(), targetRef.String(), false)
 	if err != nil {
 		return err
 	}
@@ -75,9 +83,8 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 	}
 
 	mf := imgInspect[0]
-	logrus.Debugf("Retreived image to annotate")
 
-	fd, err := getManifestFd(makeFilesafeName(imgRef.String()), transactionID)
+	fd, err := getManifestFd(imgID, transactionID)
 	if err != nil {
 		return err
 	}
@@ -86,8 +93,6 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 	if err != nil {
 		return err
 	}
-
-	logrus.Debugf("Annotating %s", imgRef.String())
 
 	// Update the mf
 	// @TODO: Prevent duplicates
@@ -117,7 +122,7 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 	}
 	// @TODO: Recalculate the digest here
 
-	if err := updateMfFile(newMf, makeFilesafeName(imgRef.String()), makeFilesafeName(targetRef.Name())); err != nil {
+	if err := updateMfFile(newMf, imgID, transactionID); err != nil {
 		return err
 	}
 
