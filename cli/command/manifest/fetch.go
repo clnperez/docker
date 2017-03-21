@@ -3,7 +3,7 @@ package manifest
 import (
 	"fmt"
 	"os"
-	//"path/filepath"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -16,14 +16,13 @@ import (
 	"github.com/docker/distribution/registry/api/errcode"
 	"github.com/docker/distribution/registry/client"
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/cli"
+	//"github.com/docker/docker/cli"
 	"github.com/docker/docker/cli/command"
 	"github.com/docker/docker/distribution"
 	"github.com/docker/docker/dockerversion"
 	"github.com/docker/docker/image"
-	"github.com/docker/docker/pkg/homedir"
 	"github.com/docker/docker/registry"
-	"github.com/spf13/cobra"
+	//"github.com/spf13/cobra"
 	//	"github.com/spf13/pflag"
 )
 
@@ -35,6 +34,7 @@ type manifestFetcher interface {
 	Fetch(ctx context.Context, ref reference.Named) ([]ImgManifestInspect, error)
 }
 
+/*
 // NewListFetchCommand creates a new `docker manifest fetch` command
 func newListFetchCommand(dockerCli *command.DockerCli) *cobra.Command {
 	var opts fetchOptions
@@ -53,6 +53,7 @@ func newListFetchCommand(dockerCli *command.DockerCli) *cobra.Command {
 	return cmd
 }
 
+
 func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 	// Get the data and then format it
 	named, err := reference.ParseNormalizedNamed(opts.remote)
@@ -60,18 +61,19 @@ func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
 		return err
 	}
 	// This could be a single manifest or manifest list
-	_, _, err = getImageData(dockerCli, named.Name(), "", true)
+	_, _, err = getImageData(dockerCli, named.Name(), "")
 	if err != nil {
 		return err
 	}
 	return nil
 }
-
+*/
 func loadManifest(manifest string, transaction string) ([]ImgManifestInspect, error) {
 
 	// Load either a single manifest (if transaction is "", that's fine), or a
 	// manifest list
 	var foundImages []ImgManifestInspect
+	logrus.Debugf("loading %s/%s", manifest, transaction)
 	fd, err := getManifestFd(manifest, transaction)
 	if err != nil {
 		return nil, err
@@ -92,43 +94,28 @@ func loadManifest(manifest string, transaction string) ([]ImgManifestInspect, er
 			}
 		}
 	}
-	return nil, fmt.Errorf("No manifest found matching %s", manifest)
+	return nil, nil
 }
 
-func storeManifests(imgInspect []ImgManifestInspect, transaction string) error {
+func storeManifest(imgInspect ImgManifestInspect, name, transaction string) error {
 	// Store this image manifest so that it can be annotated.
-
-	var (
-		err    error
-		newDir string
-	)
-
-	// Store the manifests in a user's home to prevent conflict. The HOME dir needs to be set,
-	// but can only be forcibly set on Linux at this time.
-	// See https://github.com/docker/docker/pull/29478 for more background on why this approach
-	// is being used.
-	if err := ensureHomeIfIAmStatic(); err != nil {
+	// Store the manifests in a user's home to prevent conflict.
+	manifestBase, err := buildBaseFilename()
+	transaction = makeFilesafeName(transaction)
+	if err != nil {
 		return err
 	}
-	userHome, err := homedir.GetStatic()
-	if transaction == "" {
-		newDir = fmt.Sprintf("%s/.docker/manifests/", userHome)
-	} else {
-		newDir = fmt.Sprintf("%s/.docker/manifests/%s", userHome, transaction)
-	}
-	os.MkdirAll(newDir, 0755)
-	for _, mf := range imgInspect {
-		if err = updateMfFile(mf, transaction); err != nil {
-			fmt.Printf("Error writing local manifest copy: %s\n", err)
-			return err
-		}
-
+	os.MkdirAll(filepath.Join(manifestBase, transaction), 0755)
+	logrus.Debugf("Storing  %s", name)
+	if err = updateMfFile(imgInspect, name, transaction); err != nil {
+		fmt.Printf("Error writing local manifest copy: %s\n", err)
+		return err
 	}
 
 	return nil
 }
 
-func getImageData(dockerCli *command.DockerCli, name string, transactionID string, pullRemote bool) ([]ImgManifestInspect, *registry.RepositoryInfo, error) {
+func getImageData(dockerCli *command.DockerCli, name string, transactionID string, fetchOnly bool) ([]ImgManifestInspect, *registry.RepositoryInfo, error) {
 
 	var (
 		lastErr                error
@@ -138,16 +125,18 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 		confirmedTLSRegistries = make(map[string]struct{})
 		namedRef               reference.Named
 		err                    error
+		normalName             string
 	)
 
 	if namedRef, err = reference.ParseNormalizedNamed(name); err != nil {
 		return nil, nil, fmt.Errorf("Error parsing reference for %s: %s\n", name, err)
 	}
-	logrus.Debugf("getting image data for ref: %v", namedRef)
 	// Make sure it has a tag, as long as it's not a digest
 	if _, isDigested := namedRef.(reference.Canonical); !isDigested {
 		namedRef = reference.TagNameOnly(namedRef)
 	}
+	normalName = namedRef.String()
+	logrus.Debugf("getting image data for ref: %s", normalName)
 
 	// Resolve the Repository name from fqn to RepositoryInfo
 	// This calls TrimNamed, which removes the tag, so always use namedRef for the image.
@@ -156,17 +145,17 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 		return nil, nil, err
 	}
 
-	// First check to see if stored locally, either in an ongoing transaction, or a single manfiest:
-	if !pullRemote { // if fetching, always just pull & store
-		foundImages, err = loadManifest(namedRef.Name(), transactionID)
-		if err != nil {
-			return nil, nil, err
-		}
-		// Great, no reason to pull from the registry.
-		if len(foundImages) > 0 {
-			return foundImages, repoInfo, nil
-		}
+	// First check to see if stored locally, either a single manfiest or list:
+	logrus.Debugf("Checking locally for %s", normalName)
+	foundImages, err = loadManifest(makeFilesafeName(normalName), makeFilesafeName(transactionID))
+	if err != nil {
+		return nil, nil, err
 	}
+	// Great, no reason to pull from the registry.
+	if len(foundImages) > 0 {
+		return foundImages, repoInfo, nil
+	}
+	logrus.Debugf("manifest for %s not found in local cache.", normalName)
 
 	ctx := context.Background()
 
@@ -209,7 +198,7 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 			}
 		}
 
-		logrus.Debugf("Trying to fetch image manifest of %s repository from %s %s", namedRef, endpoint.URL, endpoint.Version)
+		logrus.Debugf("Trying to fetch image manifest of %s repository from %s %s", normalName, endpoint.URL, endpoint.Version)
 
 		fetcher, err := newManifestFetcher(endpoint, repoInfo, authConfig, registryService)
 		if err != nil {
@@ -217,6 +206,7 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 			continue
 		}
 
+		// Get one manifest, or a list of them, if the ref is to a manifest list
 		if foundImages, err = fetcher.Fetch(ctx, namedRef); err != nil {
 			// Was this fetch cancelled? If so, don't try to fall back.
 			fallback := false
@@ -249,14 +239,24 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 			return nil, nil, err
 		}
 
-		if err := storeManifests(foundImages, transactionID); err != nil {
-			logrus.Errorf("Error storing manifests: %s\n", err)
+		if transactionID == "" && len(foundImages) > 1 {
+			logrus.Debugf("This fetch was for a manifest list")
+			transactionID = normalName
+		}
+		// Additionally, we're never storing on inspect, so if we're asked to save images it's for a create,
+		// and this function will have been called for each image in the create. In that case we'll have an
+		// image name *and* a transaction ID. IOW, foundImages will be only one image.
+		if !fetchOnly {
+			// @TODO: assert that len(foundImages) == 1
+			if err := storeManifest(foundImages[0], makeFilesafeName(normalName), transactionID); err != nil {
+				logrus.Errorf("Error storing manifests: %s\n", err)
+			}
 		}
 		return foundImages, repoInfo, nil
 	}
 
 	if lastErr == nil {
-		lastErr = fmt.Errorf("no endpoints found for %s\n", namedRef.String())
+		lastErr = fmt.Errorf("no endpoints found for %s\n", normalName)
 	}
 
 	return nil, nil, lastErr
@@ -283,7 +283,7 @@ func newManifestFetcher(endpoint registry.APIEndpoint, repoInfo *registry.Reposi
 	return nil, fmt.Errorf("unknown version %d for registry %s", endpoint.Version, endpoint.URL)
 }
 
-func makeImgManifestInspect(name string, img *image.Image, tag string, mfInfo manifestInfo, mediaType string, tagList []string) *ImgManifestInspect {
+func makeImgManifestInspect(img *image.Image, tag string, mfInfo manifestInfo, mediaType string, tagList []string) *ImgManifestInspect {
 	var digest digest.Digest
 	if err := mfInfo.digest.Validate(); err == nil {
 		digest = mfInfo.digest
@@ -293,7 +293,6 @@ func makeImgManifestInspect(name string, img *image.Image, tag string, mfInfo ma
 		digests = append(digests, blobDigest.String())
 	}
 	return &ImgManifestInspect{
-		NormalName:      name,
 		Size:            mfInfo.length,
 		MediaType:       mediaType,
 		Tag:             tag,
