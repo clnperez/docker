@@ -29,6 +29,7 @@ func newAnnotateCommand(dockerCli *command.DockerCli) *cobra.Command {
 		Short: "Add additional information to an image's manifest.",
 		Args:  cli.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// @TODO: These seem backwards. Am I using this incorrectly?
 			opts.target = args[0]
 			opts.image = args[1]
 			return runManifestAnnotate(dockerCli, opts)
@@ -60,7 +61,10 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 	if err != nil {
 		return fmt.Errorf("Annotate: Error prasing name for manifest (%s): %s:", opts.image, err)
 	}
+
 	transactionID := makeFilesafeName(targetRef.Name())
+	logrus.Debugf("Beginning annotate for %s/%s", opts.image, transactionID)
+
 	imgInspect, _, err := getImageData(dockerCli, opts.image, transactionID, false)
 	if err != nil {
 		return err
