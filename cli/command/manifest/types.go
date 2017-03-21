@@ -26,7 +26,6 @@ func (f fallbackError) Error() string {
 
 // ImgManifestInspect contains info to output for a manifest object.
 type ImgManifestInspect struct {
-	NormalName      string                 `json:name`
 	Size            int64                  `json:"size"`
 	MediaType       string                 `json:"media_type"`
 	Tag             string                 `json:"tag"`
