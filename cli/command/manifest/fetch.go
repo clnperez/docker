@@ -288,7 +288,7 @@ func newManifestFetcher(endpoint registry.APIEndpoint, repoInfo *registry.Reposi
 	return nil, fmt.Errorf("unknown version %d for registry %s", endpoint.Version, endpoint.URL)
 }
 
-func makeImgManifestInspect(img *image.Image, tag string, mfInfo manifestInfo, mediaType string, tagList []string) *ImgManifestInspect {
+func makeImgManifestInspect(name string, img *image.Image, tag string, mfInfo manifestInfo, mediaType string, tagList []string) *ImgManifestInspect {
 	var digest digest.Digest
 	if err := mfInfo.digest.Validate(); err == nil {
 		digest = mfInfo.digest
@@ -298,6 +298,7 @@ func makeImgManifestInspect(img *image.Image, tag string, mfInfo manifestInfo, m
 		digests = append(digests, blobDigest.String())
 	}
 	return &ImgManifestInspect{
+		RefName:         name,
 		Size:            mfInfo.length,
 		MediaType:       mediaType,
 		Tag:             tag,

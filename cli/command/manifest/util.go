@@ -59,34 +59,41 @@ func isValidOSArch(os string, arch string) bool {
 	return ok
 }
 
+func filesafeNameToRef(filename string) string {
+	// @TODO : This is going to be an issue if someone put a dash or underscore
+	// in an image name. Crap.
+	filename = strings.Replace(filename, "-", ":", -1)
+	return strings.Replace(filename, "_", "/", -1)
+}
 func makeFilesafeName(ref string) string {
 	// Make sure the ref is a normalized name before calling this func
 	// @TODO: Handle "@sha"
 	fileName := strings.Replace(ref, ":", "-", -1)
-	fileName = strings.Replace(fileName, "/", "_", -1)
-	return fileName
+	return strings.Replace(fileName, "/", "_", -1)
 }
 
-func getTransactionDirFd(transaction string) (*os.File, error) {
+func getListFilenames(transaction string) ([]string, error) {
 	baseDir, err := buildBaseFilename()
 	if err != nil {
 		return nil, err
 	}
-	transactionDir := filepath.Join(baseDir, transaction)
-	return getFdGeneric(transactionDir)
-}
-
-// @TODO: Combine this with above since nothing calls getTransactionDirFd any more
-func getListManifests(transaction string) ([]string, error) {
-	fd, err := getTransactionDirFd(makeFilesafeName(transaction))
+	transactionDir := filepath.Join(baseDir, makeFilesafeName(transaction))
 	if err != nil {
 		return nil, err
 	}
-	manifestNames, err := fd.Readdirnames(-1)
+	fd, err := os.Open(transactionDir)
 	if err != nil {
 		return nil, err
 	}
-	return manifestNames, nil
+	fileNames, err := fd.Readdirnames(-1)
+	if err != nil {
+		return nil, err
+	}
+	fd.Close()
+	for i, f := range fileNames {
+		fileNames[i] = filepath.Join(transactionDir, f)
+	}
+	return fileNames, nil
 }
 
 func getManifestFd(manifest, transaction string) (*os.File, error) {
