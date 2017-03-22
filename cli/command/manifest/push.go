@@ -432,18 +432,16 @@ func loadLocalInsecureRegistries() ([]string, error) {
 }
 
 func pushReferences(httpClient *http.Client, urlBuilder *v2.URLBuilder, ref reference.Named, manifests []manifestPush) error {
-	//pushTarget := ref.Name()
 	for _, manifest := range manifests {
-		// create a dummy tag from the integer count and the original name (in the original repo)
-		// @TODO: Pull in Phil's change for this weird tagging thingy he did :D
-		/*
-			targetRef, err := reference.ParseNamed(fmt.Sprintf("%s:%d%s", pushTarget, i, strings.Replace(manifest.Name, "/", "_", -1)))
-			if err != nil {
-				return fmt.Errorf("Error creating manifest name target for referenced manifest %q: %v", manifest.Name, err)
-			}
-		*/
-		//pushURL, err := createManifestURLFromRef(targetRef, urlBuilder)
-		pushURL, err := createManifestURLFromRef(ref, urlBuilder)
+		dgst, err := digest.Parse(manifest.Digest)
+		if err != nil {
+			return fmt.Errorf("Error parsing manifest digest (%s) for referenced manifest %q: %v", manifest.Digest, manifest.Name, err)
+		}
+		targetRef, err := reference.WithDigest(ref, dgst)
+		if err != nil {
+			return fmt.Errorf("Error creating manifest digest target for referenced manifest %q: %v", manifest.Name, err)
+		}
+		pushURL, err := urlBuilder.BuildManifestURL(targetRef)
 		if err != nil {
 			return fmt.Errorf("Error setting up manifest push URL for manifest references for %q: %v", manifest.Name, err)
 		}
@@ -464,11 +462,11 @@ func pushReferences(httpClient *http.Client, urlBuilder *v2.URLBuilder, ref refe
 			return fmt.Errorf("Referenced manifest push unsuccessful: response %d: %s", resp.StatusCode, resp.Status)
 		}
 		dgstHeader := resp.Header.Get("Docker-Content-Digest")
-		dgst, err := digest.Parse(dgstHeader)
+		dgstResult, err := digest.Parse(dgstHeader)
 		if err != nil {
 			return fmt.Errorf("Couldn't parse pushed manifest digest response: %v", err)
 		}
-		if string(dgst) != manifest.Digest {
+		if string(dgstResult) != manifest.Digest {
 			return fmt.Errorf("Pushed referenced manifest received a different digest: expected %s, got %s", manifest.Digest, string(dgst))
 		}
 		logrus.Debugf("referenced manifest %q pushed; digest matches: %s", manifest.Name, string(dgst))
