@@ -95,40 +95,43 @@ func newPushListCommand(dockerCli *command.DockerCli) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "push newRef [--file pre-annotated-yaml]",
 		Short: "Push a manifest list for an image to a repository",
-		Args:  cli.RequiresMinArgs(1),
+		Args:  cli.RequiresMinArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return putManifestList(dockerCli, opts, args)
 		},
 	}
 
 	flags := cmd.Flags()
-	flags.StringVarP(&opts.newRef, "name", "n", "", "")
 	flags.StringVarP(&opts.file, "file", "f", "", "")
 	return cmd
 }
 
-func putManifestList(dockerCli *command.DockerCli, opts pushOpts, manifests []string) error {
-	// @TODO: Take out the manifests arg and only push from either a pre-annotated yaml file,
-	// or a pre-annotated local transaction.
+func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string) error {
 	var (
 		//yamlInput         YAMLInput
+		manifests         []string
 		manifestList      manifestlist.ManifestList
+		targetRef         reference.Named
 		blobMountRequests []blobMount
 		manifestRequests  []manifestPush
+		err               error
 	)
 
-	/*
-		TODO: Before I can split this into a yaml or non-yaml flow, I need to get the transaction bits put in.
-		This requires re-working the flow so that instead of doing 'create' at the end, you do a 'create' at
-		the beginning, then annotate the parts, then push it. This will make the whole thing easier as far as
-		storing and not repeating lookups in case a user decided to use a different name that points to the same
-		blobs. :D  Thanks to @steveoe for the lightbulb.
-		if opts.newRef != nil  {
+	numArgs := len(args)
+	if numArgs == 0 {
+		if opts.file != "" {
+			return fmt.Errorf("Please push using a yaml file or a list created using 'manifest create.'")
 		}
-	*/
-	targetRef, err := reference.ParseNormalizedNamed(opts.newRef)
-	if err != nil {
-		return fmt.Errorf("Error parsing name for manifest list (%s): %v", opts.newRef, err)
+		targetRef, manifests, err = buildFromYAML(dockerCli, opts.file)
+	} else if numArgs != 1 {
+		return fmt.Errorf("More than one argument provided to 'manifest push'")
+	} else {
+		targetRef, err = reference.ParseNormalizedNamed(args[0])
+		if err != nil {
+			return fmt.Errorf("Error parsing name for manifest list (%s): %v", args[0], err)
+		}
+		// @TODO: This isn't going to work b/c it doesn't have a tag!
+		manifests, err = getListManifests(targetRef.String())
 	}
 	targetRepo, err := registry.ParseRepositoryInfo(targetRef)
 	if err != nil {
@@ -165,7 +168,7 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, manifests []st
 	logrus.Info("Retrieving digests of images...")
 	for _, manifestRef := range manifests {
 
-		mfstData, repoInfo, err := getImageData(dockerCli, manifestRef, manifestRef, true)
+		mfstData, repoInfo, err := getImageData(dockerCli, manifestRef, manifestRef, false)
 		if err != nil {
 			return err
 		}
@@ -193,7 +196,7 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, manifests []st
 			return fmt.Errorf("Digest parse of image %q failed with error: %v", manifestRef, err)
 		}
 
-		logrus.Infof("Image %q is digest %s; size: %d", manifestRef, mfstInspect.Digest, mfstInspect.Size)
+		logrus.Infof("Image %q is digest %s; size: %d", manifestRef, manifest.Digest, manifest.Size)
 
 		// if this image is in a different repo, we need to add the layer/blob digests to the list of
 		// requested blob mounts (cross-repository push) before pushing the manifest list
@@ -205,6 +208,7 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, manifests []st
 			}
 			// also must add the manifest to be pushed in the target namespace
 			logrus.Debugf("Adding manifest %q -> to be pushed to %q as a manifest reference", manifestRepoName, repoName)
+			// @TODO: Replace mfstInspect with built manifestlist.ManifestDescriptor
 			manifestRequests = append(manifestRequests, manifestPush{
 				Name:      manifestRepoName,
 				Digest:    mfstInspect.Digest.String(),
@@ -284,6 +288,10 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, manifests []st
 	return fmt.Errorf("Registry push unsuccessful: response %d: %s", resp.StatusCode, resp.Status)
 }
 
+func buildFromYAML(dockerCli *command.DockerCli, yamlFile string) (reference.Named, []string, error) {
+	return nil, nil, nil
+}
+
 func getHTTPClient(ctx context.Context, dockerCli *command.DockerCli, repoInfo *registry.RepositoryInfo, endpoint registry.APIEndpoint, repoName string) (*http.Client, error) {
 	// get the http transport, this will be used in a client to upload manifest
 	// TODO - add separate function get client
@@ -328,21 +336,6 @@ func getHTTPClient(ctx context.Context, dockerCli *command.DockerCli, repoInfo *
 
 func createManifestURLFromRef(targetRef reference.Named, urlBuilder *v2.URLBuilder) (string, error) {
 
-	/*
-		// Jump through a lot of hoops to get a Named reference without the domain included:
-		tagIndex := strings.IndexRune(targetRef.String(), ':')
-		if tagIndex < 0 {
-			return "", fmt.Errorf("No tag. Bail")
-		}
-		tag := targetRef.String()[tagIndex+1:]
-		bareRef, err := reference.WithName(reference.Path(targetRef))
-		if err != nil {
-			return "", err
-		}
-		bareRef, _ = reference.WithTag(bareRef, tag)
-		logrus.Debugf("createManifestURLFromRef ref: %s", bareRef.String())
-		manifestURL, err := urlBuilder.BuildManifestURL(bareRef)
-	*/
 	manifestURL, err := urlBuilder.BuildManifestURL(targetRef)
 	if err != nil {
 		return "", fmt.Errorf("Failed to build manifest URL from target reference: %v", err)
