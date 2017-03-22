@@ -152,7 +152,7 @@ func (mf *v2ManifestFetcher) fetchWithRepository(ctx context.Context, ref refere
 	}
 
 	for idx, img := range images {
-		imgReturn := makeImgManifestInspect(img, tagOrDigest, mfInfos[idx], mediaType[idx], tagList)
+		imgReturn := makeImgManifestInspect(ref.String(), img, tagOrDigest, mfInfos[idx], mediaType[idx], tagList)
 		imageList = append(imageList, *imgReturn)
 	}
 	return imageList, nil

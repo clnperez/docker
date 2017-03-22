@@ -130,8 +130,13 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 		if err != nil {
 			return fmt.Errorf("Error parsing name for manifest list (%s): %v", args[0], err)
 		}
-		// @TODO: This isn't going to work b/c it doesn't have a tag!
-		manifests, err = getListManifests(targetRef.String())
+		if _, isDigested := targetRef.(reference.Canonical); !isDigested {
+			targetRef = reference.TagNameOnly(targetRef)
+		}
+		manifests, err = getListFilenames(targetRef.String())
+		if err != nil {
+			return err
+		}
 	}
 	targetRepo, err := registry.ParseRepositoryInfo(targetRef)
 	if err != nil {
@@ -162,68 +167,76 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 
 	// Now create the manifest list payload by looking up the manifest schemas
 	// for the constituent images:
-
-	// TODO: Instead of having a range of manifests here, we're going to use a cache of locally-stored ones.
-	// Get the file from ~/.docker/manifests/${opts.newRef}
 	logrus.Info("Retrieving digests of images...")
-	for _, manifestRef := range manifests {
-
-		mfstData, repoInfo, err := getImageData(dockerCli, manifestRef, manifestRef, false)
-		if err != nil {
-			return err
-		}
-		manifestRepoHostname := reference.Domain(repoInfo.Name)
-		targetRepoHostname := reference.Domain(targetRepo.Name)
-		if manifestRepoHostname != targetRepoHostname {
-			return fmt.Errorf("Cannot use source images from a different registry than the target image: %s != %s", manifestRepoHostname, targetRepoHostname)
-		}
-
-		if len(mfstData) > 1 {
-			// too many responses--can only happen if a manifest list was returned for the name lookup
-			return fmt.Errorf("You specified a manifest list entry from a digest that points to a current manifest list. Manifest lists do not allow recursion.")
-		}
-
-		mfstInspect := mfstData[0]
-		manifest := manifestlist.ManifestDescriptor{
-			Platform: mfstInspect.Platform,
-		}
-		manifest.Descriptor.Digest = mfstInspect.Digest
-		manifest.Size = mfstInspect.Size
-		manifest.MediaType = mfstInspect.MediaType
-
-		err = manifest.Descriptor.Digest.Validate()
-		if err != nil {
-			return fmt.Errorf("Digest parse of image %q failed with error: %v", manifestRef, err)
-		}
-
-		logrus.Infof("Image %q is digest %s; size: %d", manifestRef, manifest.Digest, manifest.Size)
-
-		// if this image is in a different repo, we need to add the layer/blob digests to the list of
-		// requested blob mounts (cross-repository push) before pushing the manifest list
-		manifestRepoName := reference.Path(repoInfo.Name)
-		if repoName != manifestRepoName {
-			logrus.Debugf("Adding layers of %q to blob mount requests to %s", manifestRepoName, repoName)
-			for _, layer := range mfstInspect.Layers {
-				blobMountRequests = append(blobMountRequests, blobMount{FromRepo: manifestRepoName, Digest: layer})
+	logrus.Debugf("opts.file %s", opts.file)
+	if opts.file == "" {
+		// manifests is a list of file paths
+		for _, manifestFile := range manifests {
+			fd, err := os.Open(manifestFile)
+			if err != nil {
+				return err
 			}
-			// also must add the manifest to be pushed in the target namespace
-			logrus.Debugf("Adding manifest %q -> to be pushed to %q as a manifest reference", manifestRepoName, repoName)
-			// @TODO: Replace mfstInspect with built manifestlist.ManifestDescriptor
-			manifestRequests = append(manifestRequests, manifestPush{
-				Name:      manifestRepoName,
-				Digest:    mfstInspect.Digest.String(),
-				JSONBytes: mfstInspect.CanonicalJSON,
-				MediaType: mfstInspect.MediaType,
-			})
+			defer fd.Close()
+			mfstInspect, err := unmarshalIntoManifestInspect(fd)
+			if err != nil {
+				return err
+			}
+			manifestRef, err := reference.ParseNormalizedNamed(mfstInspect.RefName)
+			if err != nil {
+				return err
+			}
+			repoInfo, err := registry.ParseRepositoryInfo(manifestRef)
+			if err != nil {
+				return err
+			}
+
+			// @TODO: Everything from here until the end of the this if block can be pulled out into
+			// a function called something like buildManifest, and then each returned manifest is appeneded
+			// to the manifestlist
+			manifestRepoHostname := reference.Domain(repoInfo.Name)
+			targetRepoHostname := reference.Domain(targetRepo.Name)
+			if manifestRepoHostname != targetRepoHostname {
+				return fmt.Errorf("Cannot use source images from a different registry than the target image: %s != %s", manifestRepoHostname, targetRepoHostname)
+			}
+
+			manifest := manifestlist.ManifestDescriptor{
+				Platform: mfstInspect.Platform,
+			}
+			manifest.Descriptor.Digest = mfstInspect.Digest
+			manifest.Size = mfstInspect.Size
+			manifest.MediaType = mfstInspect.MediaType
+
+			err = manifest.Descriptor.Digest.Validate()
+			if err != nil {
+				return fmt.Errorf("Digest parse of image %q failed with error: %v", manifestRef, err)
+			}
+
+			logrus.Infof("Image %q is digest %s; size: %d", manifestRef, manifest.Digest, manifest.Size)
+
+			// if this image is in a different repo, we need to add the layer/blob digests to the list of
+			// requested blob mounts (cross-repository push) before pushing the manifest list
+			manifestRepoName := reference.Path(repoInfo.Name)
+			if repoName != manifestRepoName {
+				logrus.Debugf("Adding layers of %q to blob mount requests to %s", manifestRepoName, repoName)
+				for _, layer := range mfstInspect.Layers {
+					blobMountRequests = append(blobMountRequests, blobMount{FromRepo: manifestRepoName, Digest: layer})
+				}
+				// also must add the manifest to be pushed in the target namespace
+				logrus.Debugf("Adding manifest %q -> to be pushed to %q as a manifest reference", manifestRepoName, repoName)
+				// @TODO: Replace mfstInspect with built manifestlist.ManifestDescriptor
+				manifestRequests = append(manifestRequests, manifestPush{
+					Name:      manifestRepoName,
+					Digest:    mfstInspect.Digest.String(),
+					JSONBytes: mfstInspect.CanonicalJSON,
+					MediaType: mfstInspect.MediaType,
+				})
+			}
+			manifestList.Manifests = append(manifestList.Manifests, manifest)
 		}
-		manifestList.Manifests = append(manifestList.Manifests, manifest)
 	}
 
 	// Set the schema version
 	manifestList.Versioned = manifestlist.SchemaVersion
-
-	// ******************* SPLIT THIS INTO A PUSH FUNC ********************* \\
-	// First, what is pulled that we can acess later?
 
 	urlBuilder, err := v2.NewURLBuilderFromString(targetEndpoint.URL.String(), false)
 	logrus.Infof("manifest: put: target endpoint url: %s", targetEndpoint.URL.String())
