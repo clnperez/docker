@@ -84,12 +84,7 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 
 	mf := imgInspect[0]
 
-	fd, err := getManifestFd(imgID, transactionID)
-	if err != nil {
-		return err
-	}
-	defer fd.Close()
-	newMf, err := unmarshalIntoManifestInspect(fd)
+	newMf, err := unmarshalIntoManifestInspect(imgID, transactionID)
 	if err != nil {
 		return err
 	}
@@ -104,11 +99,11 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 		return fmt.Errorf("Manifest entry for image %s has unsupported os/arch combination: %s/%s", opts.remote, opts.os, opts.arch)
 	}*/
 	if opts.os != "" {
-		newMf.Os = opts.os
+		//newMf.Os = opts.os
 		newMf.Platform.OS = opts.os
 	}
 	if opts.arch != "" {
-		newMf.Architecture = opts.arch
+		//newMf.Architecture = opts.arch
 		newMf.Platform.Architecture = opts.arch
 	}
 	if len(opts.cpuFeatures) > 0 {
