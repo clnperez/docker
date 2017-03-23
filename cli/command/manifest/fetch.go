@@ -87,7 +87,7 @@ func loadManifest(manifest string, transaction string) ([]ImgManifestInspect, er
 			// @TODO!
 			return nil, nil
 		} else { // An individual manifest
-			mfInspect, err := unmarshalIntoManifestInspect(fd)
+			mfInspect, err := unmarshalIntoManifestInspect(manifest, transaction)
 			if err != nil {
 				return nil, err
 			}
@@ -310,11 +310,11 @@ func makeImgManifestInspect(name string, img *image.Image, tag string, mfInfo ma
 		DockerVersion:   img.DockerVersion,
 		Author:          img.Author,
 		Config:          img.Config,
-		Architecture:    img.Architecture,
-		Os:              img.OS,
-		Layers:          digests,
-		Platform:        mfInfo.platform,
-		CanonicalJSON:   mfInfo.jsonBytes,
+		//Architecture:    img.Architecture,
+		//Os:              img.OS,
+		Layers:        digests,
+		Platform:      mfInfo.platform,
+		CanonicalJSON: mfInfo.jsonBytes,
 	}
 }
 
