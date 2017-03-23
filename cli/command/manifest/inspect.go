@@ -74,8 +74,8 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 		// this is a basic single manifest
 		fmt.Fprintf(dockerCli.Out(), "%s: manifest type: %s\n", opts.remote, imgInspect[0].MediaType)
 		fmt.Fprintf(dockerCli.Out(), "      Digest: %s\n", imgInspect[0].Digest)
-		fmt.Fprintf(dockerCli.Out(), "Architecture: %s\n", imgInspect[0].Architecture)
-		fmt.Fprintf(dockerCli.Out(), "          OS: %s\n", imgInspect[0].Os)
+		fmt.Fprintf(dockerCli.Out(), "Architecture: %s\n", imgInspect[0].Platform.Architecture)
+		fmt.Fprintf(dockerCli.Out(), "          OS: %s\n", imgInspect[0].Platform.OS)
 		fmt.Fprintf(dockerCli.Out(), "    # Layers: %d\n", len(imgInspect[0].Layers))
 		for i, digest := range imgInspect[0].Layers {
 			fmt.Fprintf(dockerCli.Out(), "      layer %d: digest = %s\n", i+1, digest)

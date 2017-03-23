@@ -6,6 +6,7 @@ package manifest
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -145,16 +146,19 @@ func mfToFilename(manifest, transaction string) (string, error) {
 	return filepath.Join(baseDir, transaction, manifest), nil
 }
 
-func unmarshalIntoManifestInspect(fd *os.File) (ImgManifestInspect, error) {
+func unmarshalIntoManifestInspect(manifest, transaction string) (ImgManifestInspect, error) {
 
 	var newMf ImgManifestInspect
-	theBytes := make([]byte, 10000)
-	numRead, err := fd.Read(theBytes)
+	filename, err := mfToFilename(manifest, transaction)
+	if err != nil {
+		return ImgManifestInspect{}, err
+	}
+	buf, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return ImgManifestInspect{}, err
 	}
 
-	if err := json.Unmarshal(theBytes[:numRead], &newMf); err != nil {
+	if err := json.Unmarshal(buf, &newMf); err != nil {
 		return ImgManifestInspect{}, err
 	}
 
@@ -174,6 +178,9 @@ func updateMfFile(newMf ImgManifestInspect, mfName, transaction string) error {
 		return err
 	}
 	defer fd.Close()
+	if newMf.Platform.Architecture == "" {
+		logrus.Debugf("UH OH")
+	}
 	theBytes, err := json.Marshal(newMf)
 	if err != nil {
 		return err
