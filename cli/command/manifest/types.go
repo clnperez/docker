@@ -26,22 +26,22 @@ func (f fallbackError) Error() string {
 
 // ImgManifestInspect contains info to output for a manifest object.
 type ImgManifestInspect struct {
-	RefName         string                 "json:ref"
-	Size            int64                  `json:"size"`
-	MediaType       string                 `json:"media_type"`
-	Tag             string                 `json:"tag"`
-	Digest          digest.Digest          `json:"digest"`
-	RepoTags        []string               `json:"repotags"`
-	Comment         string                 `json:"comment"`
-	Created         string                 `json:"created"`
-	ContainerConfig *containerTypes.Config `json:"container_config"`
-	DockerVersion   string                 `json:"docker_version"`
-	Author          string                 `json:"author"`
-	Config          *containerTypes.Config `json:"config"`
-	// PlatformSpec has Arch & OS, so why twice?
-	Architecture  string                    `json:"architecture"`
-	Os            string                    `json:"os"`
-	Layers        []string                  `json:"layers"`
-	Platform      manifestlist.PlatformSpec `json:"platform"`
-	CanonicalJSON []byte                    `json:"json"`
+	RefName         string                 //`json:"ref"`
+	Size            int64                  //`json:"size"`
+	MediaType       string                 //`json:"media_type"`
+	Tag             string                 //`json:"tag"`
+	Digest          digest.Digest          //`json:"digest"`
+	RepoTags        []string               //`json:"repotags"`
+	Comment         string                 //`json:"comment"`
+	Created         string                 //`json:"created"`
+	ContainerConfig *containerTypes.Config //`json:"container_config"`
+	DockerVersion   string                 //`json:"docker_version"`
+	Author          string                 //`json:"author"`
+	Config          *containerTypes.Config //`json:"config"`
+	// PlatformSpec has Arch & OS, so why twice? OH, because of nested types and json :(
+	//Architecture  string                    `json:"architecture"`
+	//Os            string                    `json:"os"`
+	Layers        []string                  //`json:"layers"`
+	Platform      manifestlist.PlatformSpec //`json:"platform"`
+	CanonicalJSON []byte                    //`json:"json"`
 }

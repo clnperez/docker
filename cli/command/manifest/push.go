@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -149,6 +150,7 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 
 	// Now that targetRepo is set, jump through a lot of hoops to get a Named reference without
 	// the domain included:
+	// @TODO: Move this in to createManifestURLFromRef ?
 	tagIndex := strings.IndexRune(targetRef.String(), ':')
 	if tagIndex < 0 {
 		targetRef = reference.TagNameOnly(targetRef)
@@ -168,18 +170,18 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 	// Now create the manifest list payload by looking up the manifest schemas
 	// for the constituent images:
 	logrus.Info("Retrieving digests of images...")
-	logrus.Debugf("opts.file %s", opts.file)
 	if opts.file == "" {
 		// manifests is a list of file paths
 		for _, manifestFile := range manifests {
-			fd, err := os.Open(manifestFile)
+			fileParts := strings.Split(manifestFile, string(filepath.Separator))
+			numParts := len(fileParts)
+			mfstInspect, err := unmarshalIntoManifestInspect(fileParts[numParts-1], fileParts[numParts-2])
 			if err != nil {
 				return err
 			}
-			defer fd.Close()
-			mfstInspect, err := unmarshalIntoManifestInspect(fd)
-			if err != nil {
-				return err
+			//logrus.Debugf("manifest inspect: %v", mfstInspect)
+			if mfstInspect.Platform.Architecture == "" || mfstInspect.Platform.OS == "" {
+				return fmt.Errorf("Malformed manifest object. Cannot push to registry.")
 			}
 			manifestRef, err := reference.ParseNormalizedNamed(mfstInspect.RefName)
 			if err != nil {
@@ -279,7 +281,8 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 
 	// we also must push any manifests that are referenced in the manifest list into
 	// the target namespace
-	if err := pushReferences(httpClient, urlBuilder, targetRef, manifestRequests); err != nil {
+	// Use the untagged target for this so the digest is used
+	if err := pushReferences(httpClient, urlBuilder, bareRef, manifestRequests); err != nil {
 		return fmt.Errorf("Couldn't push manifests referenced in our manifest list: %v", err)
 	}
 
@@ -447,10 +450,12 @@ func loadLocalInsecureRegistries() ([]string, error) {
 func pushReferences(httpClient *http.Client, urlBuilder *v2.URLBuilder, ref reference.Named, manifests []manifestPush) error {
 	for _, manifest := range manifests {
 		dgst, err := digest.Parse(manifest.Digest)
+		logrus.Debugf("pushing ref digest %s", dgst)
 		if err != nil {
 			return fmt.Errorf("Error parsing manifest digest (%s) for referenced manifest %q: %v", manifest.Digest, manifest.Name, err)
 		}
 		targetRef, err := reference.WithDigest(ref, dgst)
+		logrus.Debugf("pushing ref %v", targetRef)
 		if err != nil {
 			return fmt.Errorf("Error creating manifest digest target for referenced manifest %q: %v", manifest.Name, err)
 		}
