@@ -99,21 +99,19 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 		return fmt.Errorf("Manifest entry for image %s has unsupported os/arch combination: %s/%s", opts.remote, opts.os, opts.arch)
 	}*/
 	if opts.os != "" {
-		//newMf.Os = opts.os
-		newMf.Platform.OS = opts.os
+		newMf.OS = opts.os
 	}
 	if opts.arch != "" {
-		//newMf.Architecture = opts.arch
-		newMf.Platform.Architecture = opts.arch
+		newMf.Architecture = opts.arch
 	}
 	if len(opts.cpuFeatures) > 0 {
-		newMf.Platform.Features = append(mf.Platform.Features, opts.cpuFeatures...)
+		newMf.Features = append(mf.Features, opts.cpuFeatures...)
 	}
 	if len(opts.osFeatures) > 0 {
-		newMf.Platform.OSFeatures = append(mf.Platform.OSFeatures, opts.osFeatures...)
+		newMf.OSFeatures = append(mf.OSFeatures, opts.osFeatures...)
 	}
 	if opts.variant != "" {
-		newMf.Platform.Variant = opts.variant
+		newMf.Variant = opts.variant
 	}
 
 	// @TODO
