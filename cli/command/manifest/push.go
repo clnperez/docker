@@ -179,48 +179,14 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 			if err != nil {
 				return err
 			}
-			//logrus.Debugf("manifest inspect: %v", mfstInspect)
 			if mfstInspect.Architecture == "" || mfstInspect.OS == "" {
 				return fmt.Errorf("Malformed manifest object. Cannot push to registry.")
 			}
-			manifestRef, err := reference.ParseNormalizedNamed(mfstInspect.RefName)
+			// @TODO: rename repoInfo to mfRepoInfo?
+			manifest, repoInfo, err := buildManifestObj(targetRepo, mfstInspect)
 			if err != nil {
 				return err
 			}
-			repoInfo, err := registry.ParseRepositoryInfo(manifestRef)
-			if err != nil {
-				return err
-			}
-
-			// @TODO: Everything from here until the end of the this if block can be pulled out into
-			// a function called something like buildManifest, and then each returned manifest is appeneded
-			// to the manifestlist
-			manifestRepoHostname := reference.Domain(repoInfo.Name)
-			targetRepoHostname := reference.Domain(targetRepo.Name)
-			if manifestRepoHostname != targetRepoHostname {
-				return fmt.Errorf("Cannot use source images from a different registry than the target image: %s != %s", manifestRepoHostname, targetRepoHostname)
-			}
-
-			manifest := manifestlist.ManifestDescriptor{
-				Platform: manifestlist.PlatformSpec{
-					Architecture: mfstInspect.Architecture,
-					OS:           mfstInspect.OS,
-					OSVersion:    mfstInspect.OSVersion,
-					OSFeatures:   mfstInspect.OSFeatures,
-					Variant:      mfstInspect.Variant,
-					Features:     mfstInspect.Features,
-				},
-			}
-			manifest.Descriptor.Digest = mfstInspect.Digest
-			manifest.Size = mfstInspect.Size
-			manifest.MediaType = mfstInspect.MediaType
-
-			err = manifest.Descriptor.Digest.Validate()
-			if err != nil {
-				return fmt.Errorf("Digest parse of image %q failed with error: %v", manifestRef, err)
-			}
-
-			logrus.Infof("Image %q is digest %s; size: %d", manifestRef, manifest.Digest, manifest.Size)
 
 			// if this image is in a different repo, we need to add the layer/blob digests to the list of
 			// requested blob mounts (cross-repository push) before pushing the manifest list
@@ -313,6 +279,46 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 
 func buildFromYAML(dockerCli *command.DockerCli, yamlFile string) (reference.Named, []string, error) {
 	return nil, nil, nil
+}
+
+func buildManifestObj(targetRepo *registry.RepositoryInfo, mfInspect ImgManifestInspect) (manifestlist.ManifestDescriptor, *registry.RepositoryInfo, error) {
+
+	manifestRef, err := reference.ParseNormalizedNamed(mfInspect.RefName)
+	if err != nil {
+		return manifestlist.ManifestDescriptor{}, nil, err
+	}
+	repoInfo, err := registry.ParseRepositoryInfo(manifestRef)
+	if err != nil {
+		return manifestlist.ManifestDescriptor{}, nil, err
+	}
+
+	manifestRepoHostname := reference.Domain(repoInfo.Name)
+	targetRepoHostname := reference.Domain(targetRepo.Name)
+	if manifestRepoHostname != targetRepoHostname {
+		return manifestlist.ManifestDescriptor{}, nil, fmt.Errorf("Cannot use source images from a different registry than the target image: %s != %s", manifestRepoHostname, targetRepoHostname)
+	}
+
+	manifest := manifestlist.ManifestDescriptor{
+		Platform: manifestlist.PlatformSpec{
+			Architecture: mfInspect.Architecture,
+			OS:           mfInspect.OS,
+			OSVersion:    mfInspect.OSVersion,
+			OSFeatures:   mfInspect.OSFeatures,
+			Variant:      mfInspect.Variant,
+			Features:     mfInspect.Features,
+		},
+	}
+	manifest.Descriptor.Digest = mfInspect.Digest
+	manifest.Size = mfInspect.Size
+	manifest.MediaType = mfInspect.MediaType
+
+	err = manifest.Descriptor.Digest.Validate()
+	if err != nil {
+		return manifestlist.ManifestDescriptor{}, nil, fmt.Errorf("Digest parse of image %q failed with error: %v", manifestRef, err)
+	}
+
+	logrus.Infof("Image %q is digest %s; size: %d", manifestRef, manifest.Digest, manifest.Size)
+	return manifest, repoInfo, nil
 }
 
 func getHTTPClient(ctx context.Context, dockerCli *command.DockerCli, repoInfo *registry.RepositoryInfo, endpoint registry.APIEndpoint, repoName string) (*http.Client, error) {
@@ -529,23 +535,3 @@ func mountBlobs(httpClient *http.Client, urlBuilder *v2.URLBuilder, ref referenc
 func statusSuccess(status int) bool {
 	return status >= 200 && status <= 399
 }
-
-/*
-// splitHostname splits a repository name to hostname and remotename string.
-// If no valid hostname is found, the default hostname is used. Repository name
-// needs to be already validated before.
-func splitHostname(name string) (hostname, remoteName string) {
-	i := strings.IndexRune(name, '/')
-	if i == -1 || (!strings.ContainsAny(name[:i], ".:") && name[:i] != "localhost") {
-		hostname, remoteName = reference.DefaultHostname, name
-	} else {
-		hostname, remoteName = name[:i], name[i+1:]
-	}
-	if hostname == reference.LegacyDefaultHostname {
-		hostname = reference.DefaultHostname
-	}
-	if hostname == reference.DefaultHostname && !strings.ContainsRune(remoteName, '/') {
-		remoteName = reference.DefaultRepoPrefix + remoteName
-	}
-	return
-}*/
