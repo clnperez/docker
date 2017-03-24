@@ -178,9 +178,6 @@ func updateMfFile(newMf ImgManifestInspect, mfName, transaction string) error {
 		return err
 	}
 	defer fd.Close()
-	if newMf.Platform.Architecture == "" {
-		logrus.Debugf("UH OH")
-	}
 	theBytes, err := json.Marshal(newMf)
 	if err != nil {
 		return err
