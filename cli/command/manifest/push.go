@@ -180,7 +180,7 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 				return err
 			}
 			//logrus.Debugf("manifest inspect: %v", mfstInspect)
-			if mfstInspect.Platform.Architecture == "" || mfstInspect.Platform.OS == "" {
+			if mfstInspect.Architecture == "" || mfstInspect.OS == "" {
 				return fmt.Errorf("Malformed manifest object. Cannot push to registry.")
 			}
 			manifestRef, err := reference.ParseNormalizedNamed(mfstInspect.RefName)
@@ -202,7 +202,14 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 			}
 
 			manifest := manifestlist.ManifestDescriptor{
-				Platform: mfstInspect.Platform,
+				Platform: manifestlist.PlatformSpec{
+					Architecture: mfstInspect.Architecture,
+					OS:           mfstInspect.OS,
+					OSVersion:    mfstInspect.OSVersion,
+					OSFeatures:   mfstInspect.OSFeatures,
+					Variant:      mfstInspect.Variant,
+					Features:     mfstInspect.Features,
+				},
 			}
 			manifest.Descriptor.Digest = mfstInspect.Digest
 			manifest.Size = mfstInspect.Size

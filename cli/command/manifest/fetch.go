@@ -310,11 +310,10 @@ func makeImgManifestInspect(name string, img *image.Image, tag string, mfInfo ma
 		DockerVersion:   img.DockerVersion,
 		Author:          img.Author,
 		Config:          img.Config,
-		//Architecture:    img.Architecture,
-		//Os:              img.OS,
-		Layers:        digests,
-		Platform:      mfInfo.platform,
-		CanonicalJSON: mfInfo.jsonBytes,
+		Architecture:    img.Architecture,
+		OS:              img.OS,
+		Layers:          digests,
+		CanonicalJSON:   mfInfo.jsonBytes,
 	}
 }
 
