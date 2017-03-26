@@ -131,16 +131,19 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 	if namedRef, err = reference.ParseNormalizedNamed(name); err != nil {
 		return nil, nil, fmt.Errorf("Error parsing reference for %s: %s\n", name, err)
 	}
-	if transactionNamed, err = reference.ParseNormalizedNamed(transactionID); err != nil {
-		return nil, nil, fmt.Errorf("Error parsing reference for %s: %s\n", transactionID, err)
+	if transactionID != "" {
+		if transactionNamed, err = reference.ParseNormalizedNamed(transactionID); err != nil {
+			return nil, nil, fmt.Errorf("Error parsing reference for %s: %s\n", transactionID, err)
+		}
+		if _, isDigested := transactionNamed.(reference.Canonical); !isDigested {
+			transactionNamed = reference.TagNameOnly(transactionNamed)
+		}
+		transactionID = makeFilesafeName(transactionNamed.String())
 	}
 
 	// Make sure these have a tag, as long as it's not a digest
 	if _, isDigested := namedRef.(reference.Canonical); !isDigested {
 		namedRef = reference.TagNameOnly(namedRef)
-	}
-	if _, isDigested := transactionNamed.(reference.Canonical); !isDigested {
-		transactionNamed = reference.TagNameOnly(transactionNamed)
 	}
 	normalName = namedRef.String()
 	logrus.Debugf("getting image data for ref: %s", normalName)
@@ -154,7 +157,7 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 
 	// First check to see if stored locally, either a single manfiest or list:
 	logrus.Debugf("Checking locally for %s", normalName)
-	foundImages, err = loadManifest(makeFilesafeName(normalName), makeFilesafeName(transactionNamed.String()))
+	foundImages, err = loadManifest(makeFilesafeName(normalName), transactionID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -253,7 +256,7 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 		// image name *and* a transaction ID. IOW, foundImages will be only one image.
 		if !fetchOnly {
 			// @TODO: assert that len(foundImages) == 1
-			if err := storeManifest(foundImages[0], makeFilesafeName(normalName), makeFilesafeName(transactionNamed.String())); err != nil {
+			if err := storeManifest(foundImages[0], makeFilesafeName(normalName), transactionID); err != nil {
 				logrus.Errorf("Error storing manifests: %s\n", err)
 			}
 		}
