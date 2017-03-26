@@ -29,7 +29,6 @@ func newAnnotateCommand(dockerCli *command.DockerCli) *cobra.Command {
 		Short: "Add additional information to an image's manifest.",
 		Args:  cli.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// @TODO: These seem backwards. Am I using this incorrectly?
 			opts.target = args[0]
 			opts.image = args[1]
 			return runManifestAnnotate(dockerCli, opts)
@@ -38,7 +37,6 @@ func newAnnotateCommand(dockerCli *command.DockerCli) *cobra.Command {
 
 	flags := cmd.Flags()
 
-	// @TODO: Should we do any validation? We can't have an exhaustive list
 	flags.StringVar(&opts.os, "os", "", "Add ios info to a manifest before pushing it.")
 	flags.StringVar(&opts.arch, "arch", "", "Add arch info to a manifest before pushing it.")
 	flags.StringSliceVar(&opts.cpuFeatures, "cpuFeatures", []string{}, "Add feature info to a manifest before pushing it.")
@@ -51,8 +49,6 @@ func newAnnotateCommand(dockerCli *command.DockerCli) *cobra.Command {
 func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) error {
 
 	// Make sure the manifests are pulled, find the file you need, unmarshal the json, edit the file, and done.
-
-	// @TODO: Should we be able to annotate a digest? like `docker pull ubuntu@sha256:45b2...`
 	targetRef, err := reference.ParseNormalizedNamed(opts.target)
 	if err != nil {
 		return fmt.Errorf("Annotate: Error parsing name for manifest list (%s): %s", opts.target, err)
@@ -91,13 +87,6 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 
 	// Update the mf
 	// @TODO: Prevent duplicates
-	// validate os/arch input
-	/*if opts.arch == "" || opts.os == "" {
-		return fmt.Errorf("You must specify an arch and os.")
-	}
-	if !isValidOSArch(opts.os, opts.arch) {
-		return fmt.Errorf("Manifest entry for image %s has unsupported os/arch combination: %s/%s", opts.remote, opts.os, opts.arch)
-	}*/
 	if opts.os != "" {
 		newMf.OS = opts.os
 	}
@@ -114,6 +103,10 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 		newMf.Variant = opts.variant
 	}
 
+	// validate os/arch input
+	if !isValidOSArch(newMf.OS, newMf.Architecture) {
+		return fmt.Errorf("Manifest entry for image has unsupported os/arch combination: %s/%s", opts.os, opts.arch)
+	}
 	// @TODO
 	// dgst := digest.FromBytes(b) can't use b/c not of the json.
 
@@ -121,5 +114,6 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 		return err
 	}
 
+	logrus.Debugf("Annotated %s with options %v", mf.RefName, opts)
 	return nil
 }
