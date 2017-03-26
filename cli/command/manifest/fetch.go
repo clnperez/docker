@@ -85,6 +85,7 @@ func loadManifest(manifest string, transaction string) ([]ImgManifestInspect, er
 		}
 		if fileInfo.IsDir() { // manifest list transaction
 			// @TODO!
+			logrus.Debugf("TODO: load manifest list from files")
 			return nil, nil
 		} else { // An individual manifest
 			mfInspect, err := unmarshalIntoManifestInspect(manifest, transaction)
@@ -156,10 +157,12 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 	}
 
 	// First check to see if stored locally, either a single manfiest or list:
-	logrus.Debugf("Checking locally for %s", normalName)
-	foundImages, err = loadManifest(makeFilesafeName(normalName), transactionID)
-	if err != nil {
-		return nil, nil, err
+	if !fetchOnly {
+		logrus.Debugf("Checking locally for %s", normalName)
+		foundImages, err = loadManifest(makeFilesafeName(normalName), transactionID)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 	// Great, no reason to pull from the registry.
 	if len(foundImages) > 0 {
