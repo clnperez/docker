@@ -16,7 +16,7 @@ func newCreateListCommand(dockerCli *command.DockerCli) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "create newRef manifest [manifest...]",
-		Short: "Push a manifest list for an image to a repository",
+		Short: "Create a local manifest list for annotating and pushing to a registry",
 		Args:  cli.RequiresMinArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return createManifestList(dockerCli, args)
