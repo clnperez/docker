@@ -60,15 +60,8 @@ func isValidOSArch(os string, arch string) bool {
 	return ok
 }
 
-func filesafeNameToRef(filename string) string {
-	// @TODO : This is going to be an issue if someone put a dash or underscore
-	// in an image name. Crap.
-	filename = strings.Replace(filename, "-", ":", -1)
-	return strings.Replace(filename, "_", "/", -1)
-}
 func makeFilesafeName(ref string) string {
 	// Make sure the ref is a normalized name before calling this func
-	// @TODO: Handle "@sha"
 	fileName := strings.Replace(ref, ":", "-", -1)
 	return strings.Replace(fileName, "/", "_", -1)
 }

@@ -89,8 +89,7 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 	// More than one response. This is a manifest list.
 	fmt.Printf("%s is a manifest list containing the following %d manifest references:\n", named.String(), len(imgInspect))
 	for i, img := range imgInspect {
-		// @TODO: These tags are wonky. e.g.: "Repo Tags: 0ppc64le_hello-world,1library_hello-world"
-		// There may be any number of repo tags here, so fix this or get an out of bounds error:
+		// @TODO: There may be any number of repo tags here, so fix this or get an out of bounds error:
 		//fmt.Printf("%d    Repo Tags: %s,%s\n", i+1, img.RepoTags[0], img.RepoTags[1])
 		fmt.Fprintf(dockerCli.Out(), "%d  Tag: %s\n", i+1, img.Tag)
 		fmt.Fprintf(dockerCli.Out(), "%d    Mfst Type: %s\n", i+1, img.MediaType)
@@ -98,8 +97,6 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 		fmt.Fprintf(dockerCli.Out(), "%d  Mfst Length: %d\n", i+1, img.Size)
 		fmt.Fprintf(dockerCli.Out(), "%d     Platform:\n", i+1)
 		fmt.Fprintf(dockerCli.Out(), "%d           -      OS: %s\n", i+1, img.OS)
-		// WINDOWS SUPPORT - NOT VENDORED YET fmt.Printf("%d           - OS Vers: %s\n", i+1, img.OSVersion)
-		// WINDOWS SUPPORT - NOT VENDORED YET fmt.Printf("%d           - OS Feat: %s\n", i+1, img.OSFeatures)
 		fmt.Fprintf(dockerCli.Out(), "%d           -    Arch: %s\n", i+1, img.Architecture)
 		fmt.Fprintf(dockerCli.Out(), "%d           - Variant: %s\n", i+1, img.Variant)
 		fmt.Fprintf(dockerCli.Out(), "%d           - CPU Features: %s\n", i+1, strings.Join(img.Features, ","))
