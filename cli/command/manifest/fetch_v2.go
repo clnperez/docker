@@ -101,8 +101,6 @@ func (mf *v2ManifestFetcher) fetchWithRepository(ctx context.Context, ref refere
 	} else {
 		return nil, fmt.Errorf("internal error: reference has neither a tag nor a digest: %s", ref.String())
 	}
-	// @TODO: I think I'm covering all my bases with tags, but what if the user just
-	// provided a digest?? Make sure that use case is valid/covered.
 
 	if manifest == nil {
 		return nil, fmt.Errorf("image manifest does not exist for tag or digest %q", tagOrDigest)
