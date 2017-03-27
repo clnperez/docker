@@ -84,9 +84,8 @@ func loadManifest(manifest string, transaction string) ([]ImgManifestInspect, er
 			return nil, err
 		}
 		if fileInfo.IsDir() { // manifest list transaction
-			// @TODO!
-			logrus.Debugf("TODO: load manifest list from files")
-			return nil, nil
+			logrus.Errorf("Not supported: loading manifest list directory")
+			return nil, fmt.Errorf("Not supported: loading manifest list directory")
 		} else { // An individual manifest
 			mfInspect, err := unmarshalIntoManifestInspect(manifest, transaction)
 			if err != nil {
@@ -258,7 +257,6 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 		// and this function will have been called for each image in the create. In that case we'll have an
 		// image name *and* a transaction ID. IOW, foundImages will be only one image.
 		if !fetchOnly {
-			// @TODO: assert that len(foundImages) == 1
 			if err := storeManifest(foundImages[0], makeFilesafeName(normalName), transactionID); err != nil {
 				logrus.Errorf("Error storing manifests: %s\n", err)
 			}
