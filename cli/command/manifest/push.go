@@ -94,7 +94,7 @@ func newPushListCommand(dockerCli *command.DockerCli) *cobra.Command {
 	opts := pushOpts{}
 
 	cmd := &cobra.Command{
-		Use:   "push newRef [--file pre-annotated-yaml]",
+		Use:   "push [newRef | --file pre-annotated-yaml]",
 		Short: "Push a manifest list for an image to a repository",
 		Args:  cli.RequiresMinArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -103,7 +103,7 @@ func newPushListCommand(dockerCli *command.DockerCli) *cobra.Command {
 	}
 
 	flags := cmd.Flags()
-	flags.StringVarP(&opts.file, "file", "f", "", "")
+	flags.StringVarP(&opts.file, "file", "f", "", "Path to a file containing a manifest list and its annotated constituent manifests")
 	return cmd
 }
 
@@ -155,7 +155,7 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 	if err != nil {
 		return fmt.Errorf("Error parsing repository name for manifest list (%s): %v", opts.newRef, err)
 	}
-	targetEndpoint, repoName, err := setupRepo(targetRepo)
+	targetEndpoint, targetRepoName, err := setupRepo(targetRepo)
 	if err != nil {
 		return fmt.Errorf("Error setting up repository endpoint and references for %q: %v", targetRef, err)
 	}
@@ -193,33 +193,6 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 			if mfstInspect.Architecture == "" || mfstInspect.OS == "" {
 				return fmt.Errorf("Malformed manifest object. Cannot push to registry.")
 			}
-			// @TODO: After re-adding manifest, take the repoInfo part out of buildManifestObj.
-			manifest, repoInfo, err := buildManifestObj(targetRepo, mfstInspect)
-			if err != nil {
-				return err
-			}
-
-			// if this image is in a different repo, we need to add the layer/blob digests to the list of
-			// requested blob mounts (cross-repository push) before pushing the manifest list
-			manifestRepoName := reference.Path(repoInfo.Name)
-			if targetRepoName != manifestRepoName {
-				blobMountRequests, manifestRequests = buildBlobMountRequestLists(mfstInspect, targetRepoName, manifestRepoName)
-			}
-		}
-	} else {
-		for _, mfEntry := range yamlInput.Manifests {
-			mfstInspects, repoInfo, err := getImageData(dockerCli, mfEntry.Image, targetRef.Name(), true)
-			if err != nil {
-				return err
-			}
-			if len(mfstInspects) == 0 {
-				return fmt.Errorf("Manifest %s not found", mfEntry.Image)
-			}
-			mfstInspect := mfstInspects[0]
-			if mfstInspect.Architecture == "" || mfstInspect.OS == "" {
-				return fmt.Errorf("Malformed manifest object. Cannot push to registry.")
-			}
-			// @TODO: After re-adding manifest, take the repoInfo part out of buildManifestObj.
 			manifest, repoInfo, err := buildManifestObj(targetRepo, mfstInspect)
 			if err != nil {
 				return err
@@ -267,7 +240,7 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 	}
 	putRequest.Header.Set("Content-Type", mediaType)
 
-	httpClient, err := getHTTPClient(ctx, dockerCli, targetRepo, targetEndpoint, repoName)
+	httpClient, err := getHTTPClient(ctx, dockerCli, targetRepo, targetEndpoint, targetRepoName)
 	if err != nil {
 		return fmt.Errorf("Failed to setup HTTP client to repository: %v", err)
 	}
