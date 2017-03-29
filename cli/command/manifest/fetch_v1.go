@@ -106,7 +106,7 @@ func (mf *v1ManifestFetcher) fetchWithSession(ctx context.Context, ref reference
 	tagged, isTagged := ref.(reference.NamedTagged)
 	if !isTagged {
 		logrus.Errorf("No tag in image name! Christy messed up.")
-		return nil, fmt.Errorf("fws: No tag in image name!")
+		return nil, fmt.Errorf("fws: No tag in image name")
 	}
 	tag := tagged.Tag()
 	tagID, err := mf.session.GetRemoteTag(repoData.Endpoints, mf.repoInfo.Name, tag)
