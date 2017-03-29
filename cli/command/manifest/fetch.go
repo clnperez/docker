@@ -217,7 +217,6 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 			continue
 		}
 
-		// Get one manifest, or a list of them, if the ref is to a manifest list
 		if foundImages, err = fetcher.Fetch(ctx, namedRef); err != nil {
 			// Was this fetch cancelled? If so, don't try to fall back.
 			fallback := false
