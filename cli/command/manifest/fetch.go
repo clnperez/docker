@@ -86,13 +86,13 @@ func loadManifest(manifest string, transaction string) ([]ImgManifestInspect, er
 		if fileInfo.IsDir() { // manifest list transaction
 			logrus.Errorf("Not supported: loading manifest list directory")
 			return nil, fmt.Errorf("Not supported: loading manifest list directory")
-		} else { // An individual manifest
-			mfInspect, err := unmarshalIntoManifestInspect(manifest, transaction)
-			if err != nil {
-				return nil, err
-			}
-			return append(foundImages, mfInspect), nil
 		}
+		// An individual manifest
+		mfInspect, err := unmarshalIntoManifestInspect(manifest, transaction)
+		if err != nil {
+			return nil, err
+		}
+		return append(foundImages, mfInspect), nil
 	}
 	return nil, nil
 }
