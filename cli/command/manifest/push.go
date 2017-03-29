@@ -57,14 +57,14 @@ type dumbCredentialStore struct {
 	auth *types.AuthConfig
 }
 
-// YAMLInput represents the YAML format input to the pushml
+// YamlInput represents the YAML format input to the pushml
 // command.
 type YamlInput struct {
 	Image     string
 	Manifests []YamlManifestEntry
 }
 
-// Entry represents an entry in the list of manifests to
+// YamlManifestEntry represents an entry in the list of manifests to
 // be combined into a manifest list, provided via the YAML input
 type YamlManifestEntry struct {
 	Image    string
@@ -465,11 +465,10 @@ func loadLocalInsecureRegistries() ([]string, error) {
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return []string{}, fmt.Errorf("Manifest create: Unable to read $HOME/.docker/config.json: %s", err)
-		} else {
-			// If the file just doesn't exist, no insecure registries were specified.
-			logrus.Debug("Manifest: No insecure registries were specified via $HOME/.docker/config.json")
-			return []string{}, nil
 		}
+		// If the file just doesn't exist, no insecure registries were specified.
+		logrus.Debug("Manifest: No insecure registries were specified via $HOME/.docker/config.json")
+		return []string{}, nil
 	}
 
 	if jsonData != nil {
