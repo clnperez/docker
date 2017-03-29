@@ -16,7 +16,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
-	//"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 
 	digest "github.com/opencontainers/go-digest"
 
@@ -59,14 +59,14 @@ type dumbCredentialStore struct {
 
 // YAMLInput represents the YAML format input to the pushml
 // command.
-type YAMLInput struct {
+type YamlInput struct {
 	Image     string
-	Manifests []Entry
+	Manifests []YamlManifestEntry
 }
 
 // Entry represents an entry in the list of manifests to
 // be combined into a manifest list, provided via the YAML input
-type Entry struct {
+type YamlManifestEntry struct {
 	Image    string
 	Platform manifestlist.PlatformSpec
 }
@@ -109,23 +109,35 @@ func newPushListCommand(dockerCli *command.DockerCli) *cobra.Command {
 
 func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string) error {
 	var (
-		//yamlInput         YAMLInput
 		manifests         []string
 		manifestList      manifestlist.ManifestList
 		targetRef         reference.Named
 		blobMountRequests []blobMount
 		manifestRequests  []manifestPush
 		err               error
+		yamlInput         YamlInput
 	)
 
+	// First get all the info we'll need from either a yaml file, or a user's locally-creatd manifest transation.
 	numArgs := len(args)
-	if numArgs == 0 {
-		if opts.file != "" {
-			return fmt.Errorf("Please push using a yaml file or a list created using 'manifest create.'")
-		}
-		targetRef, manifests, err = buildFromYAML(dockerCli, opts.file)
-	} else if numArgs != 1 {
+	if numArgs > 1 {
 		return fmt.Errorf("More than one argument provided to 'manifest push'")
+	}
+	if (numArgs == 0) && (opts.file == "") {
+		return fmt.Errorf("Please push using a yaml file or a list created using 'manifest create.'")
+	}
+	if opts.file != "" {
+		yamlInput, err = getYamlInput(dockerCli, opts.file)
+		if err != nil {
+			return fmt.Errorf("Error retrieving manifests from YAML file: %s", err)
+		}
+		targetRef, err = reference.ParseNormalizedNamed(yamlInput.Image)
+		if err != nil {
+			return fmt.Errorf("Error parsing name for manifest list (%s): %v", yamlInput.Image, err)
+		}
+		if _, isDigested := targetRef.(reference.Canonical); !isDigested {
+			targetRef = reference.TagNameOnly(targetRef)
+		}
 	} else {
 		targetRef, err = reference.ParseNormalizedNamed(args[0])
 		if err != nil {
@@ -181,7 +193,7 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 			if mfstInspect.Architecture == "" || mfstInspect.OS == "" {
 				return fmt.Errorf("Malformed manifest object. Cannot push to registry.")
 			}
-			// @TODO: rename repoInfo to mfRepoInfo?
+			// @TODO: After re-adding manifest, take the repoInfo part out of buildManifestObj.
 			manifest, repoInfo, err := buildManifestObj(targetRepo, mfstInspect)
 			if err != nil {
 				return err
@@ -190,23 +202,39 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 			// if this image is in a different repo, we need to add the layer/blob digests to the list of
 			// requested blob mounts (cross-repository push) before pushing the manifest list
 			manifestRepoName := reference.Path(repoInfo.Name)
-			if repoName != manifestRepoName {
-				logrus.Debugf("Adding layers of %q to blob mount requests to %s", manifestRepoName, repoName)
-				for _, layer := range mfstInspect.Layers {
-					blobMountRequests = append(blobMountRequests, blobMount{FromRepo: manifestRepoName, Digest: layer})
-				}
-				// also must add the manifest to be pushed in the target namespace
-				logrus.Debugf("Adding manifest %q -> to be pushed to %q as a manifest reference", manifestRepoName, repoName)
-				// @TODO: Replace mfstInspect with built manifestlist.ManifestDescriptor
-				manifestRequests = append(manifestRequests, manifestPush{
-					Name:      manifestRepoName,
-					Digest:    mfstInspect.Digest.String(),
-					JSONBytes: mfstInspect.CanonicalJSON,
-					MediaType: mfstInspect.MediaType,
-				})
+			if targetRepoName != manifestRepoName {
+				blobMountRequests, manifestRequests = buildBlobMountRequestLists(mfstInspect, targetRepoName, manifestRepoName)
+			}
+		}
+	} else {
+		for _, mfEntry := range yamlInput.Manifests {
+			mfstInspects, repoInfo, err := getImageData(dockerCli, mfEntry.Image, targetRef.Name(), true)
+			if err != nil {
+				return err
+			}
+			if len(mfstInspects) == 0 {
+				return fmt.Errorf("Manifest %s not found", mfEntry.Image)
+			}
+			mfstInspect := mfstInspects[0]
+			if mfstInspect.Architecture == "" || mfstInspect.OS == "" {
+				return fmt.Errorf("Malformed manifest object. Cannot push to registry.")
+			}
+			// @TODO: After re-adding manifest, take the repoInfo part out of buildManifestObj.
+			manifest, repoInfo, err := buildManifestObj(targetRepo, mfstInspect)
+			if err != nil {
+				return err
 			}
 			manifestList.Manifests = append(manifestList.Manifests, manifest)
+
+			// if this image is in a different repo, we need to add the layer/blob digests to the list of
+			// requested blob mounts (cross-repository push) before pushing the manifest list
+			manifestRepoName := reference.Path(repoInfo.Name)
+			if targetRepoName != manifestRepoName {
+				blobMountRequests, manifestRequests = buildBlobMountRequestLists(mfstInspect, targetRepoName, manifestRepoName)
+			}
 		}
+		// @TODO: Pull the dup parts out from these two if/else blocks. Make a list of Manifest objects and run through that
+		// doing the dup parts.
 	}
 
 	// Set the schema version
@@ -276,8 +304,23 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 	return fmt.Errorf("Registry push unsuccessful: response %d: %s", resp.StatusCode, resp.Status)
 }
 
-func buildFromYAML(dockerCli *command.DockerCli, yamlFile string) (reference.Named, []string, error) {
-	return nil, nil, nil
+func getYamlInput(dockerCli *command.DockerCli, yamlFile string) (YamlInput, error) {
+	logrus.Debugf("YAML file: %s", yamlFile)
+
+	if _, err := os.Stat(yamlFile); err != nil {
+		logrus.Debugf("Unable to open file: %s", yamlFile)
+	}
+
+	var yamlInput YamlInput
+	yamlBuf, err := ioutil.ReadFile(yamlFile)
+	if err != nil {
+		logrus.Fatalf(fmt.Sprintf("Can't read YAML file %q: %v", yamlFile, err))
+	}
+	err = yaml.Unmarshal(yamlBuf, &yamlInput)
+	if err != nil {
+		logrus.Fatalf(fmt.Sprintf("Can't unmarshal YAML file %q: %v", yamlFile, err))
+	}
+	return yamlInput, nil
 }
 
 func buildManifestObj(targetRepo *registry.RepositoryInfo, mfInspect ImgManifestInspect) (manifestlist.ManifestDescriptor, *registry.RepositoryInfo, error) {
@@ -318,6 +361,29 @@ func buildManifestObj(targetRepo *registry.RepositoryInfo, mfInspect ImgManifest
 
 	logrus.Infof("Image %q is digest %s; size: %d", manifestRef, manifest.Digest, manifest.Size)
 	return manifest, repoInfo, nil
+}
+
+func buildBlobMountRequestLists(mfstInspect ImgManifestInspect, targetRepoName, mfRepoName string) ([]blobMount, []manifestPush) {
+
+	var (
+		blobMountRequests []blobMount
+		manifestRequests  []manifestPush
+	)
+
+	logrus.Debugf("Adding layers of %q to blob mount requests to %s", mfRepoName, targetRepoName)
+	for _, layer := range mfstInspect.Layers {
+		blobMountRequests = append(blobMountRequests, blobMount{FromRepo: mfRepoName, Digest: layer})
+	}
+	// also must add the manifest to be pushed in the target namespace
+	logrus.Debugf("Adding manifest %q -> to be pushed to %q as a manifest reference", mfRepoName, targetRepoName)
+	manifestRequests = append(manifestRequests, manifestPush{
+		Name:      mfRepoName,
+		Digest:    mfstInspect.Digest.String(),
+		JSONBytes: mfstInspect.CanonicalJSON,
+		MediaType: mfstInspect.MediaType,
+	})
+
+	return blobMountRequests, manifestRequests
 }
 
 func getHTTPClient(ctx context.Context, dockerCli *command.DockerCli, repoInfo *registry.RepositoryInfo, endpoint registry.APIEndpoint, repoName string) (*http.Client, error) {
