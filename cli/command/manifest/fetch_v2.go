@@ -51,8 +51,6 @@ func (mf *v2ManifestFetcher) Fetch(ctx context.Context, ref reference.Named) ([]
 		return nil, err
 	}
 
-	logrus.Debugf("v2 Fetch: fetching image for ref %v", ref)
-
 	images, err := mf.fetchWithRepository(ctx, ref)
 	if err != nil {
 		if _, ok := err.(fallbackError); ok {
@@ -77,7 +75,6 @@ func (mf *v2ManifestFetcher) fetchWithRepository(ctx context.Context, ref refere
 		imageList   = []ImgManifestInspect{}
 	)
 
-	logrus.Debugf("Fetching v2 manifest: %s", mf.repoInfo.Name)
 	manSvc, err := mf.repo.Manifests(ctx)
 	if err != nil {
 		return nil, err
@@ -293,6 +290,7 @@ func fixManifestLayers(m *schema1.Manifest) error {
 	return nil
 }
 
+// pullSchema2 pulls an image using a schema2 manifest
 func (mf *v2ManifestFetcher) pullSchema2(ctx context.Context, ref reference.Named, mfst *schema2.DeserializedManifest) (img *image.Image, mfInfo manifestInfo, err error) {
 	mfInfo.digest, err = schema2ManifestDigest(ref, mfst)
 	if err != nil {
@@ -338,11 +336,16 @@ func (mf *v2ManifestFetcher) pullSchema2(ctx context.Context, ref reference.Name
 		}
 	}
 
-	for _, descriptor := range mfst.References() {
-		mfInfo.blobDigests = append(mfInfo.blobDigests, descriptor.Digest)
+	// The first thing in the list is the manifest's Config
+	// Thie is new as of Oct 2016: https://github.com/docker/distribution/commit/c9aaff00f89c8b67330fa80a7d7fc89162f3540b
+	// And is getting me an extra layer that, according to @stevvooe's comment, is not a layer, but something else that this
+	// image "references". So either skip the first one, or find a way to get just the Layers that is actually meant to get you
+	// just the layers (b/c this could have other referenced items added in the future, IIUC, and then we'd need to skip those too).
+	// Just make sure this doesn't break anything else that wanted that config for some reason!
+	for _, layer := range mfst.Layers {
+		//mfInfo.blobDigests = append(mfInfo.blobDigests, descriptor.Digest)
+		mfInfo.blobDigests = append(mfInfo.blobDigests, layer.Digest)
 	}
-	// add the config reference to the blob digests
-	mfInfo.blobDigests = append(mfInfo.blobDigests, mfst.Config.Digest)
 
 	img, err = image.NewFromJSON(configJSON)
 	if err != nil {
@@ -469,10 +472,8 @@ func (mf *v2ManifestFetcher) pullManifestList(ctx context.Context, ref reference
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	logrus.Debugf("Pulling manifest list entries for ML digest %v", manifestListDigest)
 
 	for _, manifestDescriptor := range mfstList.Manifests {
-		logrus.Debugf("mf descriptor: %s", manifestDescriptor)
 		manSvc, err := mf.repo.Manifests(ctx)
 		if err != nil {
 			return nil, nil, nil, err
