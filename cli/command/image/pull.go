@@ -42,7 +42,6 @@ func NewPullCommand(dockerCli command.Cli) *cobra.Command {
 
 func runPull(dockerCli command.Cli, opts pullOptions) error {
 	distributionRef, err := reference.ParseNormalizedNamed(opts.remote)
-	fmt.Println("distributionRef is : ", distributionRef)
 	if err != nil {
 		return err
 	}
