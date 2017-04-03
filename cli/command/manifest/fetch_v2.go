@@ -472,6 +472,7 @@ func (mf *v2ManifestFetcher) pullManifestList(ctx context.Context, ref reference
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	logrus.Debugf("Pulling manifest list entries for ML digest %v", manifestListDigest)
 
 	for _, manifestDescriptor := range mfstList.Manifests {
 		manSvc, err := mf.repo.Manifests(ctx)
