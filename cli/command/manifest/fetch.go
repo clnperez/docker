@@ -12,6 +12,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"golang.org/x/net/context"
 
+	"github.com/docker/distribution/manifest/manifestlist"
 	"github.com/docker/distribution/reference"
 	"github.com/docker/distribution/registry/api/errcode"
 	"github.com/docker/distribution/registry/client"
@@ -34,40 +35,6 @@ type manifestFetcher interface {
 	Fetch(ctx context.Context, ref reference.Named) ([]ImgManifestInspect, error)
 }
 
-/*
-// NewListFetchCommand creates a new `docker manifest fetch` command
-func newListFetchCommand(dockerCli *command.DockerCli) *cobra.Command {
-	var opts fetchOptions
-
-	cmd := &cobra.Command{
-		Use:   "fetch [OPTIONS] NAME[:TAG]",
-		Short: "Fetch an image's manifest list from a registry",
-		Args:  cli.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			opts.remote = args[0]
-
-			return runListFetch(dockerCli, opts)
-		},
-	}
-
-	return cmd
-}
-
-
-func runListFetch(dockerCli *command.DockerCli, opts fetchOptions) error {
-	// Get the data and then format it
-	named, err := reference.ParseNormalizedNamed(opts.remote)
-	if err != nil {
-		return err
-	}
-	// This could be a single manifest or manifest list
-	_, _, err = getImageData(dockerCli, named.Name(), "")
-	if err != nil {
-		return err
-	}
-	return nil
-}
-*/
 func loadManifest(manifest string, transaction string) ([]ImgManifestInspect, error) {
 
 	// Load either a single manifest (if transaction is "", that's fine), or a
@@ -296,6 +263,14 @@ func makeImgManifestInspect(name string, img *image.Image, tag string, mfInfo ma
 	if err := mfInfo.digest.Validate(); err == nil {
 		digest = mfInfo.digest
 	}
+
+	if mediaType == manifestlist.MediaTypeManifestList {
+		return &ImgManifestInspect{
+			MediaType: mediaType,
+			Digest:    digest,
+		}
+	}
+
 	var digests []string
 	for _, blobDigest := range mfInfo.blobDigests {
 		digests = append(digests, blobDigest.String())
@@ -313,8 +288,12 @@ func makeImgManifestInspect(name string, img *image.Image, tag string, mfInfo ma
 		DockerVersion:   img.DockerVersion,
 		Author:          img.Author,
 		Config:          img.Config,
-		Architecture:    img.Architecture,
-		OS:              img.OS,
+		Architecture:    mfInfo.platform.Architecture,
+		OS:              mfInfo.platform.OS,
+		OSVersion:       mfInfo.platform.OSVersion,
+		OSFeatures:      mfInfo.platform.OSFeatures,
+		Variant:         mfInfo.platform.Variant,
+		Features:        mfInfo.platform.Features,
 		Layers:          digests,
 		CanonicalJSON:   mfInfo.jsonBytes,
 	}
