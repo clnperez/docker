@@ -36,6 +36,7 @@ type ImgManifestInspect struct {
 	DockerVersion   string                 `json:"docker_version"`
 	Author          string                 `json:"author"`
 	Config          *containerTypes.Config `json:"config"`
+	References      []string               `json:"references"`
 	Layers          []string               `json:"layers"`
 	// The following are top-level objects because nested json from a file
 	// won't unmarshal correctly.

@@ -35,6 +35,7 @@ type v2ManifestFetcher struct {
 
 type manifestInfo struct {
 	blobDigests []digest.Digest
+	layers      []string
 	digest      digest.Digest
 	platform    manifestlist.PlatformSpec
 	length      int64
@@ -336,15 +337,11 @@ func (mf *v2ManifestFetcher) pullSchema2(ctx context.Context, ref reference.Name
 		}
 	}
 
-	// The first thing in the list is the manifest's Config
-	// Thie is new as of Oct 2016: https://github.com/docker/distribution/commit/c9aaff00f89c8b67330fa80a7d7fc89162f3540b
-	// And is getting me an extra layer that, according to @stevvooe's comment, is not a layer, but something else that this
-	// image "references". So either skip the first one, or find a way to get just the Layers that is actually meant to get you
-	// just the layers (b/c this could have other referenced items added in the future, IIUC, and then we'd need to skip those too).
-	// Just make sure this doesn't break anything else that wanted that config for some reason!
+	for _, descriptor := range mfst.References() {
+		mfInfo.blobDigests = append(mfInfo.blobDigests, descriptor.Digest)
+	}
 	for _, layer := range mfst.Layers {
-		//mfInfo.blobDigests = append(mfInfo.blobDigests, descriptor.Digest)
-		mfInfo.blobDigests = append(mfInfo.blobDigests, layer.Digest)
+		mfInfo.layers = append(mfInfo.layers, layer.Digest.String())
 	}
 
 	img, err = image.NewFromJSON(configJSON)

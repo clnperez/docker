@@ -343,8 +343,8 @@ func buildBlobMountRequestLists(mfstInspect ImgManifestInspect, targetRepoName, 
 		manifestRequests  []manifestPush
 	)
 
-	logrus.Debugf("Adding layers of %q to blob mount requests to %s", mfRepoName, targetRepoName)
-	for _, layer := range mfstInspect.Layers {
+	logrus.Debugf("Adding manifest references of %q to blob mount requests to %s", mfRepoName, targetRepoName)
+	for _, layer := range mfstInspect.References {
 		blobMountRequests = append(blobMountRequests, blobMount{FromRepo: mfRepoName, Digest: layer})
 	}
 	// also must add the manifest to be pushed in the target namespace
