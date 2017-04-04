@@ -162,7 +162,7 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 
 	// Now that targetRepo is set, jump through a lot of hoops to get a Named reference without
 	// the domain included (targetRef), and one without the tag (bareRef)
-	tagIndex := strings.IndexRune(targetRef.String(), ':')
+	tagIndex := strings.LastIndex(targetRef.String(), ":")
 	if tagIndex < 0 {
 		targetRef = reference.TagNameOnly(targetRef)
 		tagIndex = strings.IndexRune(targetRef.String(), ':')
