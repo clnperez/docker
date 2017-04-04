@@ -294,7 +294,8 @@ func makeImgManifestInspect(name string, img *image.Image, tag string, mfInfo ma
 		OSFeatures:      mfInfo.platform.OSFeatures,
 		Variant:         mfInfo.platform.Variant,
 		Features:        mfInfo.platform.Features,
-		Layers:          digests,
+		References:      digests,
+		Layers:          mfInfo.layers,
 		CanonicalJSON:   mfInfo.jsonBytes,
 	}
 }
