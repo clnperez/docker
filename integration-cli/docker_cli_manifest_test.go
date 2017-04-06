@@ -10,6 +10,7 @@ import (
 	"github.com/docker/docker/integration-cli/registry"
 	"github.com/go-check/check"
 )
+
 func init() {
 	check.Suite(&DockerManifestSuite{
 		ds: &DockerSuite{},
@@ -17,8 +18,8 @@ func init() {
 }
 
 type DockerManifestSuite struct {
-	ds	*DockerSuite
-	reg	*registry.V2
+	ds  *DockerSuite
+	reg *registry.V2
 }
 
 func (s *DockerManifestSuite) SetUpSuite(c *check.C) {
@@ -27,7 +28,7 @@ func (s *DockerManifestSuite) SetUpSuite(c *check.C) {
 	if _, err := os.Stat("/root/.docker/config.json"); os.IsNotExist(err) {
 		os.Create("/root/.docker/config.json")
 	}
-	f, err := os.OpenFile("/root/.docker/config.json",os.O_APPEND|os.O_WRONLY, 0600)
+	f, err := os.OpenFile("/root/.docker/config.json", os.O_APPEND|os.O_WRONLY, 0600)
 	c.Assert(err, checker.IsNil)
 	defer f.Close()
 
@@ -36,12 +37,13 @@ func (s *DockerManifestSuite) SetUpSuite(c *check.C) {
 	c.Assert(err, checker.IsNil)
 
 	configLocation := "/root/.docker/config.json"
-        _, err = os.Stat(configLocation)
+	_, err = os.Stat(configLocation)
 	c.Assert(err, checker.IsNil)
 
 }
 
 func (s *DockerManifestSuite) TearDownSuite(c *check.C) {
+	// intetionally empty
 }
 
 func (s *DockerManifestSuite) SetUpTest(c *check.C) {
@@ -82,13 +84,13 @@ func (s *DockerManifestSuite) TestManifestCreate(c *check.C) {
 	splitRepo := strings.Split(testRepo, "/")
 	c.Assert(len(splitRepo), checker.Equals, 2)
 
-	manifestLocation := "/root/.docker/manifests/docker.io_" + splitRepo[0] + "_" + splitRepo[1] + "-latest" 
+	manifestLocation := "/root/.docker/manifests/docker.io_" + splitRepo[0] + "_" + splitRepo[1] + "-latest"
 	_, err = os.Stat(manifestLocation)
 	c.Assert(err, checker.IsNil, check.Commentf("Manifest not found in ", manifestLocation))
 
 }
 
-func (s *DockerManifestSuite) TestManifestPush(c *check.C){
+func (s *DockerManifestSuite) TestManifestPush(c *check.C) {
 	testRepo := "testrepo"
 	testRepoRegistry := fmt.Sprintf("%s/%s", privateRegistryURL, testRepo)
 
@@ -128,7 +130,6 @@ func (s *DockerManifestSuite) TestManifestInspectPushedImage(c *check.C) {
 }
 
 func (s *DockerManifestSuite) TestManifestAnnotate(c *check.C) {
-
 	testRepo := "testrepo"
 	testRepoRegistry := fmt.Sprintf("%s/%s", privateRegistryURL, testRepo)
 
