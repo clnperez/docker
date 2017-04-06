@@ -203,7 +203,9 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 			// requested blob mounts (cross-repository push) before pushing the manifest list
 			manifestRepoName := reference.Path(repoInfo.Name)
 			if targetRepoName != manifestRepoName {
-				blobMountRequests, manifestRequests = buildBlobMountRequestLists(mfstInspect, targetRepoName, manifestRepoName)
+				bmr, mr := buildBlobMountRequestLists(mfstInspect, targetRepoName, manifestRepoName)
+				blobMountRequests = append(blobMountRequests, bmr...)
+				manifestRequests = append(manifestRequests, mr...)
 			}
 		}
 		// @TODO: Pull the dup parts out from these two if/else blocks. Make a list of Manifest objects and run through that
