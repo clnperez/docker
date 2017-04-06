@@ -1,125 +1,165 @@
 package main
 
 import (
-	//"fmt"
+	"fmt"
+	"os"
+	"runtime"
+	"strings"
 
 	"github.com/docker/docker/integration-cli/checker"
 	"github.com/docker/docker/integration-cli/registry"
 	"github.com/go-check/check"
 )
-
-const (
-	privateRegistryURLV1     = "127.0.0.1:5000"
-	privateRegistryURLV2     = "127.0.0.1:5001"
-	privateRegistryURLV2Sch1 = "127.0.0.1:5002"
-	privateRegistryURLV1Auth = "127.0.0.1:5003"
-	privateRegistryURLV2Auth = "127.0.0.1:5004"
-
-	binaryV1        = "docker-registry"
-	binaryV2        = "registry-v2"
-	binaryV2Schema1 = "registry-v2-schema1"
-)
-
 func init() {
 	check.Suite(&DockerManifestSuite{
 		ds: &DockerSuite{},
 	})
 }
 
-//TODO: see what docker already does
-// regarding testing reg v1
-type testRegistryV1 struct {
-	//	cmd *exec.Cmd
-	url string
-	dir string
-}
-
 type DockerManifestSuite struct {
-	ds            *DockerSuite
-	regV1         *testRegistryV1
-	regV2         *registry.V2
-	regV2Schema1  *registry.V2
-	regV1WithAuth *testRegistryV1
-	regV2WithAuth *registry.V2
+	ds	*DockerSuite
+	reg	*registry.V2
 }
 
 func (s *DockerManifestSuite) SetUpSuite(c *check.C) {
-	// can't think of anything
+	// make config.json if it doesn't exist, and add insecure registry to it
+	os.Mkdir("/root/.docker/", 0770)
+	if _, err := os.Stat("/root/.docker/config.json"); os.IsNotExist(err) {
+		os.Create("/root/.docker/config.json")
+	}
+	f, err := os.OpenFile("/root/.docker/config.json",os.O_APPEND|os.O_WRONLY, 0600)
+	c.Assert(err, checker.IsNil)
+	defer f.Close()
+
+	insecureRegistry := "{\"insecure-registries\" : [\"127.0.0.1:5000\"]}"
+	_, err = f.WriteString(insecureRegistry)
+	c.Assert(err, checker.IsNil)
+
+	configLocation := "/root/.docker/config.json"
+        _, err = os.Stat(configLocation)
+	c.Assert(err, checker.IsNil)
+
 }
 
 func (s *DockerManifestSuite) TearDownSuite(c *check.C) {
-	// can't think of anything here either
 }
 
 func (s *DockerManifestSuite) SetUpTest(c *check.C) {
-	testRequires(c, registry.Hosting)
+	testRequires(c, DaemonIsLinux, registry.Hosting)
 
-	s.regV1 = setupRegistryV1At(c, false, privateRegistryURLV1)
-	s.regV2 = setupRegistry(c, false, "", privateRegistryURLV2)
-	s.regV2Schema1 = setupRegistry(c, true, "", privateRegistryURLV2Sch1)
-	s.regV1WithAuth = setupRegistryV1At(c, true, privateRegistryURLV1Auth)
-	s.regV2WithAuth = setupRegistry(c, false, "htpasswd", privateRegistryURLV2Auth)
+	// setup registry and populate it with two busybox images
+	s.reg = setupRegistry(c, false, "", privateRegistryURL)
 
+	image1 := fmt.Sprintf("%s/busybox", privateRegistryURL)
+	image2 := fmt.Sprintf("%s/busybox2", privateRegistryURL)
+
+	dockerCmd(c, "tag", "busybox", image1)
+	dockerCmd(c, "tag", "busybox", image2)
+
+	_, _, err := dockerCmdWithError("push", image1)
+	c.Assert(err, checker.IsNil)
+
+	_, _, err = dockerCmdWithError("push", image2)
+	c.Assert(err, checker.IsNil)
 }
 
 func (s *DockerManifestSuite) TearDownTest(c *check.C) {
-	// not checking V1 registries now
-	if s.regV2 != nil {
-		s.regV2.Close()
+	if s.reg != nil {
+		s.reg.Close()
 	}
-	if s.regV2Schema1 != nil {
-		s.regV2Schema1.Close()
-	}
-	if s.regV2WithAuth != nil {
-		// docker logout of registry? probably look how this is done in reg suite
-		s.regV2WithAuth.Close()
-	}
-
 	s.ds.TearDownTest(c)
-
 }
 
-func (s *DockerManifestSuite) TestManifestFetchWithoutList(c *check.C) {
-	testRequires(c, registry.Hosting)
+func (s *DockerManifestSuite) TestManifestCreate(c *check.C) {
+	testRepo := "testrepo/busybox"
 
-	_, errCode := dockerCmd(c, "manifest", "fetch", "busybox:latest")
-
-	c.Assert(errCode, checker.Equals, 0)
-
-}
-
-// tests a manifest inspect
-func (s *DockerManifestSuite) TestManifestInspect(c *check.C) {
-	testRequires(c, registry.Hosting)
-	image := "busybox:latest"
-
-	out, rc, _ := dockerCmdWithError("manifest", "inspect", image)
-	c.Assert(rc, checker.Equals, 0)
-	// @TODO: Put better inspect verification in when there's better output.
-	c.Assert(out, checker.Contains, "sha256")
-}
-
-// tests a manifest fetch on an unknown image
-func (s *DockerManifestSuite) TestManifestFetchOnUnknownImage(c *check.C) {
-	testRequires(c, registry.Hosting)
-
-	unknownImage := "busybox:thisdoesntexist"
-
-	// going to have to test with error here
-	out, _, _ := dockerCmdWithError("manifest", "fetch", unknownImage)
-
+	out, _, _ := dockerCmdWithError("manifest", "create", testRepo, "busybox", "busybox:thisdoesntexist")
 	c.Assert(out, checker.Contains, "manifest unknown")
+
+	_, _, err := dockerCmdWithError("manifest", "create", testRepo, "busybox", "debian:jessie")
+	c.Assert(err, checker.IsNil)
+
+	splitRepo := strings.Split(testRepo, "/")
+	c.Assert(len(splitRepo), checker.Equals, 2)
+
+	manifestLocation := "/root/.docker/manifests/docker.io_" + splitRepo[0] + "_" + splitRepo[1] + "-latest" 
+	_, err = os.Stat(manifestLocation)
+	c.Assert(err, checker.IsNil, check.Commentf("Manifest not found in ", manifestLocation))
+
+}
+
+func (s *DockerManifestSuite) TestManifestPush(c *check.C){
+	testRepo := "testrepo"
+	testRepoRegistry := fmt.Sprintf("%s/%s", privateRegistryURL, testRepo)
+
+	image1 := fmt.Sprintf("%s/busybox", privateRegistryURL)
+	image2 := fmt.Sprintf("%s/busybox2", privateRegistryURL)
+
+	dockerCmd(c, "manifest", "create", testRepoRegistry, image1, image2)
+
+	dockerCmd(c, "manifest", "annotate", testRepoRegistry, image1, "--os", runtime.GOOS, "--arch", runtime.GOARCH)
+	dockerCmd(c, "manifest", "annotate", testRepoRegistry, image2, "--os", runtime.GOOS, "--arch", runtime.GOARCH)
+
+	out, _, err := dockerCmdWithError("manifest", "push", testRepoRegistry)
+	c.Assert(err, checker.IsNil)
+	successfulPush := "Succesfully pushed manifest list " + testRepo
+	c.Assert(out, checker.Contains, successfulPush)
+}
+
+// tests a manifest inspect from a pushed image
+func (s *DockerManifestSuite) TestManifestInspectPushedImage(c *check.C) {
+
+	testRepo := "testrepo"
+	testRepoRegistry := fmt.Sprintf("%s/%s", privateRegistryURL, testRepo)
+
+	image1 := fmt.Sprintf("%s/busybox", privateRegistryURL)
+	image2 := fmt.Sprintf("%s/busybox2", privateRegistryURL)
+
+	dockerCmd(c, "manifest", "create", testRepoRegistry, image1, image2)
+	dockerCmd(c, "manifest", "annotate", testRepoRegistry, image1, "--os", "linux", "--arch", "amd64")
+	dockerCmd(c, "manifest", "annotate", testRepoRegistry, image2, "--os", "linux", "--arch", "amd64")
+
+	dockerCmd(c, "manifest", "push", testRepoRegistry)
+
+	out, _ := dockerCmd(c, "manifest", "inspect", testRepoRegistry)
+	c.Assert(out, checker.Contains, "is a manifest list containing the following 2 manifest references:")
+	c.Assert(out, checker.Contains, testRepo)
+
 }
 
 func (s *DockerManifestSuite) TestManifestAnnotate(c *check.C) {
-	testRequires(c, registry.Hosting)
-	// Since annotate changes a local manifest, no need for a registry
-	_, rc := dockerCmd(c, "manifest", "annotate", "busybox", "--arch", "amd64", "--os", "linux", "--cpuFeatures", "sse")
-	c.Assert(rc, checker.Equals, 0)
-}
 
-func setupRegistryV1At(c *check.C, auth bool, url string) *testRegistryV1 {
-	return &testRegistryV1{
-		url: url,
-	}
+	testRepo := "testrepo"
+	testRepoRegistry := fmt.Sprintf("%s/%s", privateRegistryURL, testRepo)
+
+	image1 := fmt.Sprintf("%s/busybox", privateRegistryURL)
+	image2 := fmt.Sprintf("%s/busybox2", privateRegistryURL)
+
+	dockerCmd(c, "manifest", "create", testRepoRegistry, image1, image2)
+
+	// test with bad os / arch
+	out, _, _ := dockerCmdWithError("manifest", "annotate", testRepoRegistry, image1, "--os", "bados", "--arch", "amd64")
+	c.Assert(out, checker.Contains, "Manifest entry for image has unsupported os/arch combination")
+
+	out, _, _ = dockerCmdWithError("manifest", "annotate", testRepoRegistry, image2, "--os", "linux", "--arch", "badarch")
+	c.Assert(out, checker.Contains, "Manifest entry for image has unsupported os/arch combination")
+
+	// now annotate correctly
+	_, _, err := dockerCmdWithError("manifest", "annotate", testRepoRegistry, image1, "--os", "linux", "--arch", "amd64", "--cpuFeatures", "sse1", "--osFeatures", "osf1")
+	c.Assert(err, checker.IsNil)
+	_, _, err = dockerCmdWithError("manifest", "annotate", testRepoRegistry, image2, "--os", "freebsd", "--arch", "arm", "--cpuFeatures", "sse2", "--osFeatures", "osf2")
+	c.Assert(err, checker.IsNil)
+
+	dockerCmd(c, "manifest", "push", testRepoRegistry)
+
+	out, _ = dockerCmd(c, "manifest", "inspect", testRepoRegistry)
+	c.Assert(out, checker.Contains, "OS: linux")
+	c.Assert(out, checker.Contains, "OS: freebsd")
+	c.Assert(out, checker.Contains, "Arch: amd64")
+	c.Assert(out, checker.Contains, "Arch: arm")
+	c.Assert(out, checker.Contains, "CPU Features: sse")
+	c.Assert(out, checker.Contains, "CPU Features: sse2")
+	c.Assert(out, checker.Contains, "OS Features: osf1")
+	c.Assert(out, checker.Contains, "OS Features: osf2")
+
 }

@@ -89,7 +89,7 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 	// More than one response. This is a manifest list.
 	fmt.Fprintf(dockerCli.Out(), "%s is a manifest list containing the following %d manifest references:\n", named.String(), len(imgInspect))
 	fmt.Fprintf(dockerCli.Out(), "Digest: %s\n", imgInspect[0].Digest)
-	for i, img := range imgInspect[1:] {
+	for i, img := range imgInspect[0:] {
 		// @TODO: There may be any number of repo tags here, so fix this or get an out of bounds error:
 		//fmt.Printf("%d    Repo Tags: %s,%s\n", i+1, img.RepoTags[0], img.RepoTags[1])
 		fmt.Fprintf(dockerCli.Out(), "%d  Tag: %s\n", i+1, img.Tag)
