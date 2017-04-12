@@ -45,6 +45,7 @@ func createManifestList(dockerCli *command.DockerCli, args []string) error {
 	logrus.Info("Retrieving digests of images...")
 	for _, manifestRef := range manifests {
 
+		// @TODO : Change to Fetch and pass context obj instead of cli obj
 		mfstData, _, err := getImageData(dockerCli, manifestRef, targetRef.Name(), false)
 		if err != nil {
 			return err

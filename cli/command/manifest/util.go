@@ -182,6 +182,53 @@ func updateMfFile(newMf ImgManifestInspect, mfName, transaction string) error {
 	return nil
 }
 
+func storeManifest(imgInspect ImgManifestInspect, name, transaction string) error {
+	// Store this image manifest so that it can be annotated.
+	// Store the manifests in a user's home to prevent conflict.
+	manifestBase, err := buildBaseFilename()
+	transaction = makeFilesafeName(transaction)
+	if err != nil {
+		return err
+	}
+	os.MkdirAll(filepath.Join(manifestBase, transaction), 0755)
+	logrus.Debugf("Storing  %s", name)
+	if err = updateMfFile(imgInspect, name, transaction); err != nil {
+		fmt.Printf("Error writing local manifest copy: %s\n", err)
+		return err
+	}
+
+	return nil
+}
+
+func loadManifest(manifest string, transaction string) ([]ImgManifestInspect, error) {
+
+	// Load either a single manifest (if transaction is "", that's fine), or a
+	// manifest list
+	var foundImages []ImgManifestInspect
+	fd, err := getManifestFd(manifest, transaction)
+	if err != nil {
+		return nil, err
+	}
+	if fd != nil {
+		defer fd.Close()
+		fileInfo, err := fd.Stat()
+		if err != nil {
+			return nil, err
+		}
+		if fileInfo.IsDir() { // manifest list transaction
+			logrus.Errorf("Not supported: loading manifest list directory")
+			return nil, fmt.Errorf("Not supported: loading manifest list directory")
+		}
+		// An individual manifest
+		mfInspect, err := unmarshalIntoManifestInspect(manifest, transaction)
+		if err != nil {
+			return nil, err
+		}
+		return append(foundImages, mfInspect), nil
+	}
+	return nil, nil
+}
+
 /*
 func buildOfficialManifest(mfstInspect manifestImgInspect) (manifestlist.ManifestDescriptor, error) {
 
