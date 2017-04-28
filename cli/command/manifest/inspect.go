@@ -79,8 +79,8 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 		fmt.Fprintf(dockerCli.Out(), "      Digest: %s\n", imgInspect[0].Digest)
 		fmt.Fprintf(dockerCli.Out(), "Architecture: %s\n", imgInspect[0].Architecture)
 		fmt.Fprintf(dockerCli.Out(), "          OS: %s\n", imgInspect[0].OS)
-		fmt.Fprintf(dockerCli.Out(), "    # Layers: %d\n", len(imgInspect[0].Layers))
-		for i, digest := range imgInspect[0].Layers {
+		fmt.Fprintf(dockerCli.Out(), "    # Layers: %d\n", len(imgInspect[0].LayerDigests))
+		for i, digest := range imgInspect[0].LayerDigests {
 			fmt.Fprintf(dockerCli.Out(), "      layer %d: digest = %s\n", i+1, digest)
 		}
 		return nil
@@ -102,8 +102,8 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 		fmt.Fprintf(dockerCli.Out(), "%d           - Variant: %s\n", i+1, img.Variant)
 		fmt.Fprintf(dockerCli.Out(), "%d           - CPU Features: %s\n", i+1, strings.Join(img.Features, ","))
 		fmt.Fprintf(dockerCli.Out(), "%d           - OS Features: %s\n", i+1, strings.Join(img.OSFeatures, ","))
-		fmt.Fprintf(dockerCli.Out(), "%d     # Layers: %d\n", i+1, len(img.Layers))
-		for j, digest := range img.Layers {
+		fmt.Fprintf(dockerCli.Out(), "%d     # Layers: %d\n", i+1, len(img.LayerDigests))
+		for j, digest := range img.LayerDigests {
 			fmt.Fprintf(dockerCli.Out(), "         layer %d: digest = %s\n", j+1, digest)
 		}
 		fmt.Fprintf(dockerCli.Out(), "\n")

@@ -181,20 +181,3 @@ func updateMfFile(newMf ImgManifestInspect, mfName, transaction string) error {
 	}
 	return nil
 }
-
-/*
-func buildOfficialManifest(mfstInspect manifestImgInspect) (manifestlist.ManifestDescriptor, error) {
-
-	manifest := manifestlist.ManifestDescriptor{
-		Platform: mfstInspect.Platform,
-	}
-	manifest.Descriptor.Digest = mfstInspect.Digest //@TODO Make sure this is recalculated in annotate
-	manifest.Size = mfstInspect.Size
-	manifest.MediaType = mfstInspect.MediaType
-	manifest.Layers = mfstInspect.Layers
-
-	err := manifest.Descriptor.Digest.Validate()
-	if err != nil {
-		return fmt.Errorf("Digest parse of image %q failed with error: %v", manifestRef, err)
-	}
-}*/

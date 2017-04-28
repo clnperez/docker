@@ -37,7 +37,7 @@ type ImgManifestInspect struct {
 	Author          string                 `json:"author"`
 	Config          *containerTypes.Config `json:"config"`
 	References      []string               `json:"references"`
-	Layers          []string               `json:"layers"`
+	LayerDigests    []string               `json:"layers_digests"`
 	// The following are top-level objects because nested json from a file
 	// won't unmarshal correctly.
 	Architecture string   `json:"architecture"`
