@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/spf13/cobra"
 
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/cli"
 	"github.com/docker/docker/cli/command"
-	"github.com/spf13/cobra"
 )
 
 type inspectOptions struct {
@@ -45,6 +45,7 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 	// Get the data and then format it
 	var (
 		imgInspect []ImgManifestInspect
+		prettyJSON bytes.Buffer
 	)
 
 	named, err := reference.ParseNormalizedNamed(opts.remote)
@@ -58,31 +59,16 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	if opts.raw == true {
-		out, err := json.Marshal(imgInspect)
-		if err != nil {
-			logrus.Fatal(err)
-		}
-		var prettyJSON bytes.Buffer
-		err = json.Indent(&prettyJSON, out, "", "\t")
+	// output basic informative details about the image
+	if len(imgInspect) == 1 {
+		// this is a basic single manifest
+		img := imgInspect[0]
+		err = json.Indent(&prettyJSON, img.CanonicalJSON, "", "\t")
 		if err != nil {
 			logrus.Fatal(err)
 		}
 		fmt.Fprintf(dockerCli.Out(), string(prettyJSON.String()))
-		return nil
-	}
 
-	// output basic informative details about the image
-	if len(imgInspect) == 1 {
-		// this is a basic single manifest
-		fmt.Fprintf(dockerCli.Out(), "%s: manifest type: %s\n", opts.remote, imgInspect[0].MediaType)
-		fmt.Fprintf(dockerCli.Out(), "      Digest: %s\n", imgInspect[0].Digest)
-		fmt.Fprintf(dockerCli.Out(), "Architecture: %s\n", imgInspect[0].Architecture)
-		fmt.Fprintf(dockerCli.Out(), "          OS: %s\n", imgInspect[0].OS)
-		fmt.Fprintf(dockerCli.Out(), "    # Layers: %d\n", len(imgInspect[0].LayerDigests))
-		for i, digest := range imgInspect[0].LayerDigests {
-			fmt.Fprintf(dockerCli.Out(), "      layer %d: digest = %s\n", i+1, digest)
-		}
 		return nil
 	}
 
