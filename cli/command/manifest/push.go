@@ -334,7 +334,6 @@ func buildManifestObj(targetRepo *registry.RepositoryInfo, mfInspect ImgManifest
 		return manifestlist.ManifestDescriptor{}, nil, fmt.Errorf("Digest parse of image %q failed with error: %v", manifestRef, err)
 	}
 
-	logrus.Infof("Image %q is digest %s; size: %d", manifestRef, manifest.Digest, manifest.Size)
 	return manifest, repoInfo, nil
 }
 

@@ -8,9 +8,11 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/docker/distribution/manifest/manifestlist"
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/cli"
 	"github.com/docker/docker/cli/command"
+	"github.com/docker/docker/registry"
 )
 
 type inspectOptions struct {
@@ -71,13 +73,36 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 		return nil
 	}
 
+	targetRef, err := reference.ParseNormalizedNamed(opts.remote)
+	if err != nil {
+		return fmt.Errorf("Error parsing name for manifest list (%s): %v", opts.remote, err)
+	}
+	targetRepo, err := registry.ParseRepositoryInfo(targetRef)
+	if err != nil {
+		return fmt.Errorf("Error parsing repository name for manifest list (%s): %v", opts.remote, err)
+	}
+
+	manifests := []manifestlist.ManifestDescriptor{}
 	// More than one response. This is a manifest list.
 	for _, img := range imgInspect {
-		err = json.Indent(&prettyJSON, img.CanonicalJSON, "", "\t")
+		mfd, _, err := buildManifestObj(targetRepo, img)
 		if err != nil {
-			logrus.Fatal(err)
+			return fmt.Errorf("Error assembling ManifestDescriptor")
 		}
-		fmt.Fprintf(dockerCli.Out(), string(prettyJSON.String()))
+		manifests = append(manifests, mfd)
 	}
+	deserializedML, err := manifestlist.FromDescriptors(manifests)
+	if err != nil {
+		return err
+	}
+	jsonBytes, err := deserializedML.MarshalJSON()
+	if err != nil {
+		return err
+	}
+	err = json.Indent(&prettyJSON, jsonBytes, "", "\t")
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(dockerCli.Out(), "%s\n", prettyJSON.String())
 	return nil
 }
