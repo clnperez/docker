@@ -297,7 +297,6 @@ func (mf *v2ManifestFetcher) pullSchema2(ctx context.Context, ref reference.Name
 	if err != nil {
 		return nil, mfInfo, err
 	}
-
 	target := mfst.Target()
 
 	configChan := make(chan []byte, 1)
@@ -356,6 +355,12 @@ func (mf *v2ManifestFetcher) pullSchema2(ctx context.Context, ref reference.Name
 	}
 	mfInfo.length = int64(len(mfBytes))
 	mfInfo.jsonBytes = mfBytes
+	mfInfo.platform = manifestlist.PlatformSpec{
+		OS:           img.OS,
+		Architecture: img.Architecture,
+		OSVersion:    img.OSVersion,
+		OSFeatures:   img.OSFeatures,
+	}
 	return img, mfInfo, nil
 }
 
