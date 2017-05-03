@@ -108,28 +108,7 @@ func (s *DockerManifestSuite) TestManifestPush(c *check.C) {
 	c.Assert(out, checker.Contains, successfulPush)
 }
 
-// tests a manifest inspect from a pushed image
-func (s *DockerManifestSuite) TestManifestInspectPushedImage(c *check.C) {
-
-	testRepo := "testrepo"
-	testRepoRegistry := fmt.Sprintf("%s/%s", privateRegistryURL, testRepo)
-
-	image1 := fmt.Sprintf("%s/busybox", privateRegistryURL)
-	image2 := fmt.Sprintf("%s/busybox2", privateRegistryURL)
-
-	dockerCmd(c, "manifest", "create", testRepoRegistry, image1, image2)
-	dockerCmd(c, "manifest", "annotate", testRepoRegistry, image1, "--os", "linux", "--arch", "amd64")
-	dockerCmd(c, "manifest", "annotate", testRepoRegistry, image2, "--os", "linux", "--arch", "amd64")
-
-	dockerCmd(c, "manifest", "push", testRepoRegistry)
-
-	out, _ := dockerCmd(c, "manifest", "inspect", testRepoRegistry)
-	c.Assert(out, checker.Contains, "is a manifest list containing the following 2 manifest references:")
-	c.Assert(out, checker.Contains, testRepo)
-
-}
-
-func (s *DockerManifestSuite) TestManifestAnnotate(c *check.C) {
+func (s *DockerManifestSuite) TestManifestAnnotatePushInspect(c *check.C) {
 	testRepo := "testrepo"
 	testRepoRegistry := fmt.Sprintf("%s/%s", privateRegistryURL, testRepo)
 
@@ -145,8 +124,8 @@ func (s *DockerManifestSuite) TestManifestAnnotate(c *check.C) {
 	out, _, _ = dockerCmdWithError("manifest", "annotate", testRepoRegistry, image2, "--os", "linux", "--arch", "badarch")
 	c.Assert(out, checker.Contains, "Manifest entry for image has unsupported os/arch combination")
 
-	// now annotate correctly
-	_, _, err := dockerCmdWithError("manifest", "annotate", testRepoRegistry, image1, "--os", "linux", "--arch", "amd64", "--cpuFeatures", "sse1", "--osFeatures", "osf1")
+	// now annotate correctly, but give duplicate cpu and os features
+	_, _, err := dockerCmdWithError("manifest", "annotate", testRepoRegistry, image1, "--os", "linux", "--arch", "amd64", "--cpuFeatures", "sse1, sse1", "--osFeatures", "osf1, osf1")
 	c.Assert(err, checker.IsNil)
 	_, _, err = dockerCmdWithError("manifest", "annotate", testRepoRegistry, image2, "--os", "freebsd", "--arch", "arm", "--cpuFeatures", "sse2", "--osFeatures", "osf2")
 	c.Assert(err, checker.IsNil)
@@ -154,13 +133,15 @@ func (s *DockerManifestSuite) TestManifestAnnotate(c *check.C) {
 	dockerCmd(c, "manifest", "push", testRepoRegistry)
 
 	out, _ = dockerCmd(c, "manifest", "inspect", testRepoRegistry)
-	c.Assert(out, checker.Contains, "OS: linux")
-	c.Assert(out, checker.Contains, "OS: freebsd")
-	c.Assert(out, checker.Contains, "Arch: amd64")
-	c.Assert(out, checker.Contains, "Arch: arm")
-	c.Assert(out, checker.Contains, "CPU Features: sse")
-	c.Assert(out, checker.Contains, "CPU Features: sse2")
-	c.Assert(out, checker.Contains, "OS Features: osf1")
-	c.Assert(out, checker.Contains, "OS Features: osf2")
+	c.Assert(out, checker.Contains, "linux")
+	c.Assert(out, checker.Contains, "freebsd")
+	c.Assert(out, checker.Contains, "amd64")
+	c.Assert(out, checker.Contains, "arm")
+	c.Assert(out, checker.Contains, "sse1")
+	c.Assert(out, checker.Contains, "sse2")
+	c.Assert(out, checker.Contains, "osf1")
+	c.Assert(out, checker.Contains, "osf2")
+	c.Assert(strings.Count(out, "sse1"), checker.Equals, 1)
+	c.Assert(strings.Count(out, "osf1"), checker.Equals, 1)
 
 }

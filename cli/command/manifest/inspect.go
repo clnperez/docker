@@ -68,7 +68,7 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 	// output basic informative details about the image
 	if len(imgInspect) == 1 {
 		// this is a basic single manifest
-		err = json.Indent(&prettyJSON, imgInspect[0].CanonicalJSON, "", "\t")
+		err = json.Indent(&prettyJSON, imgInspect[0].CanonicalJSON, "", "    ")
 		if err != nil {
 			return err
 		}
@@ -85,7 +85,7 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 			return err
 		}
 		prettyJSON.Reset()
-		err = json.Indent(&prettyJSON, jsonBytes, "", "\t")
+		err = json.Indent(&prettyJSON, jsonBytes, "", "    ")
 		if err != nil {
 			return err
 		}
@@ -110,7 +110,7 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 	if err != nil {
 		return err
 	}
-	err = json.Indent(&prettyJSON, jsonBytes, "", "\t")
+	err = json.Indent(&prettyJSON, jsonBytes, "", "    ")
 	if err != nil {
 		return err
 	}

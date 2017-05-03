@@ -86,18 +86,17 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 	}
 
 	// Update the mf
-	// @TODO: Prevent duplicates
 	if opts.os != "" {
 		newMf.OS = opts.os
 	}
 	if opts.arch != "" {
 		newMf.Architecture = opts.arch
 	}
-	if len(opts.cpuFeatures) > 0 {
-		newMf.Features = append(mf.Features, opts.cpuFeatures...)
+	for _, cpuFeature := range opts.cpuFeatures {
+		newMf.Features = appendIfUnique(mf.Features, cpuFeature)
 	}
-	if len(opts.osFeatures) > 0 {
-		newMf.OSFeatures = append(mf.OSFeatures, opts.osFeatures...)
+	for _, osFeature := range opts.osFeatures {
+		newMf.OSFeatures = appendIfUnique(mf.OSFeatures, osFeature)
 	}
 	if opts.variant != "" {
 		newMf.Variant = opts.variant
@@ -116,4 +115,12 @@ func runManifestAnnotate(dockerCli *command.DockerCli, opts annotateOptions) err
 
 	logrus.Debugf("Annotated %s with options %v", mf.RefName, opts)
 	return nil
+}
+func appendIfUnique(list []string, str string) []string {
+	for _, s := range list {
+		if s == str {
+			return list
+		}
+	}
+	return append(list, str)
 }
