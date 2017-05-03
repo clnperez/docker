@@ -16,8 +16,8 @@ import (
 )
 
 type inspectOptions struct {
-	remote string
-	raw    bool
+	remote   string
+	platform bool
 }
 
 // NewInspectCommand creates a new `docker manifest inspect` command
@@ -36,7 +36,7 @@ func newInspectCommand(dockerCli *command.DockerCli) *cobra.Command {
 
 	flags := cmd.Flags()
 
-	flags.BoolVarP(&opts.raw, "raw", "r", false, "Provide raw JSON output")
+	flags.BoolVarP(&opts.platform, "platform", "p", false, "Output additional info about platform")
 
 	return cmd
 }
@@ -53,6 +53,11 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 	if err != nil {
 		return err
 	}
+	targetRepo, err := registry.ParseRepositoryInfo(named)
+	if err != nil {
+		return err
+	}
+
 	// For now, always pull as there' no reason to store an inspect. They're quick to get.
 	// When the engine is multi-arch image aware, we can store these in a universal location to
 	// save a little bandwidth.
@@ -63,23 +68,29 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 	// output basic informative details about the image
 	if len(imgInspect) == 1 {
 		// this is a basic single manifest
-		img := imgInspect[0]
-		err = json.Indent(&prettyJSON, img.CanonicalJSON, "", "\t")
+		err = json.Indent(&prettyJSON, imgInspect[0].CanonicalJSON, "", "\t")
 		if err != nil {
-			logrus.Fatal(err)
+			return err
 		}
-		fmt.Fprintf(dockerCli.Out(), string(prettyJSON.String()))
-
+		fmt.Fprintf(dockerCli.Out(), "%s\n", prettyJSON.String())
+		if !opts.platform {
+			return nil
+		}
+		mfd, _, err := buildManifestObj(targetRepo, imgInspect[0])
+		if err != nil {
+			return err
+		}
+		jsonBytes, err := json.Marshal(mfd)
+		if err != nil {
+			return err
+		}
+		prettyJSON.Reset()
+		err = json.Indent(&prettyJSON, jsonBytes, "", "\t")
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(dockerCli.Out(), "%s\n", prettyJSON.String())
 		return nil
-	}
-
-	targetRef, err := reference.ParseNormalizedNamed(opts.remote)
-	if err != nil {
-		return fmt.Errorf("Error parsing name for manifest list (%s): %v", opts.remote, err)
-	}
-	targetRepo, err := registry.ParseRepositoryInfo(targetRef)
-	if err != nil {
-		return fmt.Errorf("Error parsing repository name for manifest list (%s): %v", opts.remote, err)
 	}
 
 	manifests := []manifestlist.ManifestDescriptor{}
