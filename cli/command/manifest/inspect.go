@@ -61,7 +61,7 @@ func runListInspect(dockerCli *command.DockerCli, opts inspectOptions) error {
 	// For now, always pull as there' no reason to store an inspect. They're quick to get.
 	// When the engine is multi-arch image aware, we can store these in a universal location to
 	// save a little bandwidth.
-	imgInspect, _, err = getImageData(dockerCli, named.Name(), "", true)
+	imgInspect, _, err = getImageData(dockerCli, named.String(), "", true)
 	if err != nil {
 		logrus.Fatal(err)
 	}

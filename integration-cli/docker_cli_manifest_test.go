@@ -72,6 +72,41 @@ func (s *DockerManifestSuite) TearDownTest(c *check.C) {
 	s.ds.TearDownTest(c)
 }
 
+func (s *DockerManifestSuite) TestManifestInspectUntagged(c *check.C) {
+	testRepo := "testrepo"
+	testRepoRegistry := fmt.Sprintf("%s/%s", privateRegistryURL, testRepo)
+
+	image1 := fmt.Sprintf("%s/busybox", testRepoRegistry)
+
+	dockerCmd(c, "tag", "busybox", image1)
+	dockerCmd(c, "push", image1)
+
+	out, _, err := dockerCmdWithError("manifest", "inspect", image1)
+	c.Assert(err, checker.IsNil)
+	c.Assert(out, checker.Not(checker.Contains), "not found")
+}
+
+func (s *DockerManifestSuite) TestManifestInspectTagged(c *check.C) {
+	testRepo := "testrepo"
+	testRepoRegistry := fmt.Sprintf("%s/%s", privateRegistryURL, testRepo)
+
+	imageFound := fmt.Sprintf("%s/busybox:push", testRepoRegistry)
+	imageNotfound := fmt.Sprintf("%s/busybox:nopush", testRepoRegistry)
+
+	dockerCmd(c, "tag", "busybox", imageFound)
+	dockerCmd(c, "push", imageFound)
+
+	// Make sure the error message always contains "not found"
+	out, _, err := dockerCmdWithError("manifest", "inspect", imageNotfound)
+	c.Assert(err, checker.Not(checker.IsNil))
+	c.Assert(out, checker.Contains, "not found")
+
+	// Make sure tags are kept
+	out, _, err = dockerCmdWithError("manifest", "inspect", imageFound)
+	c.Assert(err, checker.IsNil)
+	c.Assert(out, checker.Not(checker.Contains), "not found")
+}
+
 func (s *DockerManifestSuite) TestManifestCreate(c *check.C) {
 	testRepo := "testrepo/busybox"
 
