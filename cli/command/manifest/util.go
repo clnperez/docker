@@ -136,7 +136,7 @@ func mfToFilename(manifest, transaction string) (string, error) {
 	if err != nil {
 		return "", nil
 	}
-	return filepath.Join(baseDir, transaction, manifest), nil
+	return filepath.Join(baseDir, makeFilesafeName(transaction), makeFilesafeName(manifest)), nil
 }
 
 func unmarshalIntoManifestInspect(manifest, transaction string) (ImgManifestInspect, error) {

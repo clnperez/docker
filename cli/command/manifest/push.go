@@ -38,6 +38,7 @@ import (
 type pushOpts struct {
 	newRef string
 	file   string
+	purge  bool
 }
 
 type existingTokenHandler struct {
@@ -104,6 +105,8 @@ func newPushListCommand(dockerCli *command.DockerCli) *cobra.Command {
 
 	flags := cmd.Flags()
 	flags.StringVarP(&opts.file, "file", "f", "", "Path to a file containing a manifest list and its annotated constituent manifests")
+	flags.BoolVarP(&opts.purge, "purge", "p", true, "After pushing, delete the user's locally-stored manifest list info")
+
 	return cmd
 }
 
@@ -116,6 +119,7 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 		manifestRequests  []manifestPush
 		err               error
 		yamlInput         YamlInput
+		targetFilename    string
 	)
 
 	// First get all the info we'll need from either a yaml file, or a user's locally-creatd manifest transation.
@@ -150,6 +154,8 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 		if err != nil {
 			return err
 		}
+		// Set this now, for purging the dir later, because we alter it below to use for the pushURL
+		targetFilename, _ = mfToFilename(targetRef.String(), "")
 	}
 	targetRepo, err := registry.ParseRepositoryInfo(targetRef)
 	if err != nil {
@@ -272,6 +278,13 @@ func putManifestList(dockerCli *command.DockerCli, opts pushOpts, args []string)
 		dgst, err := digest.Parse(dgstHeader)
 		if err != nil {
 			return err
+		}
+		if opts.purge == true {
+			logrus.Debugf("Deleting files at %s", targetFilename)
+			if err := os.RemoveAll(targetFilename); err != nil {
+				// Not a fatal error
+				logrus.Info("Unable to clean up manifest files in %s", targetFilename)
+			}
 		}
 		logrus.Infof("Succesfully pushed manifest list %s with digest %s", targetRef, dgst)
 		return nil
