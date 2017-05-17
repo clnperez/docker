@@ -123,10 +123,7 @@ func buildBaseFilename() (string, error) {
 	if err := ensureHomeIfIAmStatic(); err != nil {
 		return "", err
 	}
-	userHome, err := homedir.GetStatic()
-	if err != nil {
-		return "", err
-	}
+	userHome := homedir.Get()
 	return filepath.Join(userHome, ".docker", "manifests"), nil
 }
 

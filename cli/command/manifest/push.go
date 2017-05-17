@@ -470,25 +470,26 @@ func loadLocalInsecureRegistries() ([]string, error) {
 	insecureRegistries := []string{}
 	// Check $HOME/.docker/config.json. There may be mismatches between what the user has in their
 	// local config and what the daemon they're talking to allows, but we can be okay with that.
-	userHome, err := homedir.GetStatic()
-	if err != nil {
-		return []string{}, fmt.Errorf("Manifest create: lookup local insecure registries: Unable to retreive $HOME")
+	userHome := homedir.Get()
+	if userHome == "" {
+		// I don't think this can happen, but I'm being cautious.
+		return []string{}, fmt.Errorf("manifest: User $HOME not set. Unable to read $HOME/.docker/config.json")
 	}
 
 	jsonData, err := ioutil.ReadFile(fmt.Sprintf("%s/.docker/config.json", userHome))
 	if err != nil {
 		if !os.IsNotExist(err) {
-			return []string{}, fmt.Errorf("Manifest create: Unable to read $HOME/.docker/config.json: %s", err)
+			return []string{}, fmt.Errorf("manifest: Unable to read $HOME/.docker/config.json: %s", err)
 		}
 		// If the file just doesn't exist, no insecure registries were specified.
-		logrus.Debug("Manifest: No insecure registries were specified via $HOME/.docker/config.json")
+		logrus.Debug("manifest: No insecure registries were specified via $HOME/.docker/config.json")
 		return []string{}, nil
 	}
 
 	if jsonData != nil {
 		cf := configfile.ConfigFile{}
 		if err := json.Unmarshal(jsonData, &cf); err != nil {
-			logrus.Debugf("Manifest create: Unable to unmarshal insecure registries from $HOME/.docker/config.json: %s", err)
+			logrus.Debugf("manifest: Unable to unmarshal insecure registries from $HOME/.docker/config.json: %s", err)
 			return []string{}, nil
 		}
 		if cf.InsecureRegistries == nil {
@@ -503,7 +504,7 @@ func loadLocalInsecureRegistries() ([]string, error) {
 			} else if ips, err := net.LookupHost(reg); err == nil {
 				insecureRegistries = append(insecureRegistries, ips...)
 			} else {
-				return []string{}, fmt.Errorf("Manifest create: Invalid registry (%s) specified in ~/.docker/config.json: %s", reg, err)
+				return []string{}, fmt.Errorf("manifest: Invalid registry (%s) specified in ~/.docker/config.json: %s", reg, err)
 			}
 		}
 	}
@@ -575,7 +576,7 @@ func mountBlobs(httpClient *http.Client, urlBuilder *v2.URLBuilder, ref referenc
 		}
 
 		resp.Body.Close()
-		if resp.StatusCode != http.StatusCreated {
+		if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusAccepted {
 			return fmt.Errorf("Blob mount failed to url %s: HTTP status %d", url, resp.StatusCode)
 		}
 		logrus.Debugf("Mount of blob %s succeeded, location: %q", blob.Digest, resp.Header.Get("Location"))
