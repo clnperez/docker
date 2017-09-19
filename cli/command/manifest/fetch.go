@@ -194,6 +194,7 @@ func getImageData(dockerCli *command.DockerCli, name string, transactionID strin
 			if strings.Contains(err.Error(), "timeout") {
 				return nil, nil, err
 			}
+			logrus.Debugf("continuing on v1 ping errror: %s", err)
 			continue
 		}
 
