@@ -61,6 +61,9 @@ RUN apt-get update && apt-get install -y \
 	vim-common \
 	--no-install-recommends
 
+# Set user.email so crosbymichael's in-container merge commits go smoothly
+RUN git config --global user.email 'docker-dummy@example.com'
+
 # Install Go
 # NOTE: official ppc64le go binaries weren't available until go 1.6.4 and 1.7.4
 # IMPORTANT: When updating this please note that stdlib archive/tar pkg is vendored
@@ -70,6 +73,18 @@ RUN curl -fsSL "https://golang.org/dl/go${GO_VERSION}.linux-ppc64le.tar.gz" \
 
 ENV PATH /go/bin:/usr/local/go/bin:$PATH
 ENV GOPATH /go
+
+ENV GO_COMMIT 382d4928b8a758a91f06de9e6cb10b92bb882eff
+
+RUN TEMPDIR="$(mktemp -d)" \
+    && mv /usr/local/go $TEMPDIR \
+    && export GOROOT_BOOTSTRAP=$TEMPDIR/go \
+    && cd /usr/local \
+    && git clone --no-checkout https://go.googlesource.com/go \
+    && cd go \
+    && git checkout "${GO_COMMIT}" \
+    && cd src \ 
+    && ./make.bash 2>&1
 
 # Install two versions of the registry. The first is an older version that
 # only supports schema1 manifests. The second is a newer version that supports
@@ -108,9 +123,6 @@ RUN git clone https://github.com/docker/docker-py.git /docker-py \
 	&& git checkout -q $DOCKER_PY_COMMIT \
 	&& pip install docker-pycreds==0.2.1 \
 	&& pip install -r test-requirements.txt
-
-# Set user.email so crosbymichael's in-container merge commits go smoothly
-RUN git config --global user.email 'docker-dummy@example.com'
 
 # Add an unprivileged user to be used for tests which need it
 RUN groupadd -r docker
