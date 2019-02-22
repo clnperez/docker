@@ -15,7 +15,7 @@
 # the case. Therefore, you don't have to disable it anymore.
 #
 
-FROM ppc64le/debian:jessie
+FROM debian:stretch
 
 # allow replacing httpredir or deb mirror
 ARG APT_MIRROR=deb.debian.org
@@ -41,7 +41,7 @@ RUN apt-get update && apt-get install -y \
 	libcap-dev \
 	libltdl-dev \
 	libsqlite3-dev \
-	libsystemd-journal-dev \
+	libsystemd-dev \
 	libtool \
 	mercurial \
 	pkg-config \
@@ -50,6 +50,7 @@ RUN apt-get update && apt-get install -y \
 	python-pip \
 	python-websocket \
 	xfsprogs \
+    python-setuptools \
 	tar \
 	vim-common \
 	--no-install-recommends
@@ -95,7 +96,7 @@ RUN set -x \
 
 # Install Go
 # NOTE: official ppc64le go binaries weren't available until go 1.6.4 and 1.7.4
-ENV GO_VERSION 1.7.5
+ENV GO_VERSION 1.10.8
 RUN curl -fsSL "https://golang.org/dl/go${GO_VERSION}.linux-ppc64le.tar.gz" \
 	| tar -xzC /usr/local
 
